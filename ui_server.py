@@ -26,6 +26,7 @@ import briefing
 import calendar_ics
 import documents
 import events_store
+import music
 import scripture
 import stocks
 
@@ -77,6 +78,12 @@ def http_json(url: str, method: str = "GET", body=None, headers=None, timeout=12
 
 def cider_token() -> str:
     return str((load_json(CONFIG, {}).get("cider") or {}).get("token") or "")
+
+
+def provider() -> music.Provider:
+    """The configured music source, resolved fresh so a settings change applies
+    without restarting the server."""
+    return music.get_provider(load_json(CONFIG, {}))
 
 
 def cider_api(path: str, method: str = "GET", body=None):
@@ -201,6 +208,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(self.month(query.get("ym", [""])[0]))
             if route == "/api/queue":
                 return self._json(self.queue())
+            if route == "/api/providers":
+                return self._json({"ok": True,
+                                   "providers": music.describe_providers(load_json(CONFIG, {})),
+                                   "active": provider().name})
             if route == "/api/config":
                 return self._json({
                     "config": load_json(CONFIG, {}),
@@ -288,14 +299,15 @@ class Handler(BaseHTTPRequestHandler):
     def status(self) -> dict:
         out = {}
 
-        token = cider_token()
-        try:
-            playing = cider_api("/api/v1/playback/is-playing")
-            out["cider"] = {"ok": True, "detail": "playing" if playing.get("is_playing") else "connected, paused"}
-        except urllib.error.HTTPError as exc:
-            out["cider"] = {"ok": False, "detail": "token rejected" if exc.code == 403 else f"HTTP {exc.code}"}
-        except Exception:
-            out["cider"] = {"ok": False, "detail": "not running" if not token else "unreachable"}
+        prov = provider()
+        state = prov.state(full=False)
+        if state.get("ok"):
+            out["music"] = {"ok": True,
+                            "detail": f"{prov.label} — "
+                                      + ("playing" if state.get("playing") else "paused")}
+        else:
+            out["music"] = {"ok": False,
+                            "detail": f"{prov.label} — {state.get('error', 'unavailable')}"}
 
         try:
             tags = http_json(f"{OLLAMA}/api/tags", timeout=4)
@@ -364,9 +376,12 @@ class Handler(BaseHTTPRequestHandler):
         return {"ok": True, "results": results, "note": note}
 
     def playlists(self, q: str) -> dict:
-        if not cider_token():
-            return {"ok": False, "error": "No Cider API token saved yet."}
-        names = all_playlists()
+        prov = provider()
+        if not prov.capabilities.get("playlists"):
+            return {"ok": False,
+                    "error": f"{prov.label} can't browse playlists - "
+                             "start one in the app yourself and Morning Brief will pick it up."}
+        names = prov.all_playlists()
 
         if not q.strip():
             return {"ok": True, "exact": None, "matches": names[:40], "total": len(names)}
@@ -455,111 +470,29 @@ class Handler(BaseHTTPRequestHandler):
         return self.briefing_data()
 
     def playback(self, full: bool = True) -> dict:
-        """Transport state. `full` also fetches the track, which is slow.
+        """Transport state from whichever provider is configured.
 
-        is-playing / shuffle-mode / repeat-mode answer in ~40ms between them,
-        but now-playing takes several seconds. The dashboard polls the cheap
-        fields often and the track only occasionally.
+        The response also carries the provider's capabilities so the dashboard
+        can grey out what this source genuinely cannot do - a YouTube video has
+        no next track, and nothing outside Cider exposes a queue.
         """
-        if not cider_token():
-            return {"ok": False, "error": "no Cider token"}
-        try:
-            playing = cider_api("/api/v1/playback/is-playing").get("is_playing", False)
-            shuffle = cider_api("/api/v1/playback/shuffle-mode").get("value", 0)
-            repeat = cider_api("/api/v1/playback/repeat-mode").get("value", 0)
-        except Exception as exc:
-            return {"ok": False, "error": f"Cider unreachable ({type(exc).__name__})"}
-
-        out = {"ok": True, "playing": bool(playing),
-               "shuffle": int(shuffle or 0), "repeat": int(repeat or 0), "full": full}
-        if not full:
-            return out
-
-        try:
-            np = cider_api("/api/v1/playback/now-playing").get("info", {}) or {}
-            duration = np.get("durationInMillis")
-            out.update(track=np.get("name", ""), artist=np.get("artistName", ""),
-                       album=np.get("albumName", ""),
-                       artwork=(np.get("artwork") or {}).get("url", ""),
-                       # Cider reports elapsed in seconds but track length in
-                       # milliseconds - normalise both to seconds here so the
-                       # browser never has to remember which is which.
-                       elapsed=np.get("currentPlaybackTime"),
-                       duration=(duration / 1000.0) if duration else None,
-                       remaining=np.get("remainingTime"))
-        except Exception:
-            out["full"] = False  # transport is still valid; the track just didn't arrive
-        return out
+        prov = provider()
+        state = prov.state(full=full)
+        state.setdefault("provider", prov.name)
+        state["capabilities"] = prov.capabilities
+        return state
 
     def queue(self, limit: int = 60) -> dict:
-        """Upcoming tracks, trimmed.
-
-        Cider's raw queue is ~364KB for 100 tracks because each entry carries
-        full catalogue metadata. The panel needs five fields, so it's cut down
-        here rather than shipped to the browser.
-        """
-        if not cider_token():
-            return {"ok": False, "error": "no Cider token"}
-        try:
-            raw = cider_api("/api/v1/playback/queue")
-            np = cider_api("/api/v1/playback/now-playing").get("info", {}) or {}
-        except Exception as exc:
-            return {"ok": False, "error": f"Cider unreachable ({type(exc).__name__})"}
-
-        items = raw if isinstance(raw, list) else (raw.get("data") or [])
-        playing_name = (np.get("name") or "").strip()
-        playing_artist = (np.get("artistName") or "").strip()
-
-        out, current = [], -1
-        for index, entry in enumerate(items[:limit]):
-            attrs = (entry.get("attributes") if isinstance(entry, dict) else {}) or {}
-            name = (attrs.get("name") or "").strip()
-            artist = (attrs.get("artistName") or "").strip()
-            # Cider gives no explicit "current index", so match on the track
-            # itself. First match wins - a repeated track later in the queue
-            # shouldn't steal the highlight.
-            if current < 0 and name == playing_name and artist == playing_artist:
-                current = index
-            ms = attrs.get("durationInMillis")
-            out.append({
-                "index": index, "name": name, "artist": artist,
-                "album": attrs.get("albumName", ""),
-                "seconds": (ms / 1000.0) if ms else None,
-                "artwork": (attrs.get("artwork") or {}).get("url", ""),
-            })
-        return {"ok": True, "items": out, "current": current, "total": len(items)}
+        return provider().queue(limit)
 
     def playback_action(self, payload: dict) -> dict:
+        prov = provider()
         action = payload.get("action", "")
-        simple = {
-            "play": "/api/v1/playback/play", "pause": "/api/v1/playback/pause",
-            "next": "/api/v1/playback/next", "previous": "/api/v1/playback/previous",
-            "shuffle": "/api/v1/playback/toggle-shuffle",
-            "repeat": "/api/v1/playback/toggle-repeat",
-        }
-        if action == "seek":
-            cider_api("/api/v1/playback/seek", "POST",
-                      {"position": max(0, float(payload.get("position", 0)))})
-        elif action == "jump":
-            cider_api("/api/v1/playback/queue/change-to-index", "POST",
-                      {"index": max(0, int(payload.get("index", 0)))})
-        elif action == "set-shuffle":
-            # Cider only exposes a toggle, so read first and flip only if needed.
-            want = 1 if payload.get("on") else 0
-            current = int(cider_api("/api/v1/playback/shuffle-mode").get("value", 0) or 0)
-            if current != want:
-                cider_api("/api/v1/playback/toggle-shuffle", "POST")
-        elif action in simple:
-            cider_api(simple[action], "POST")
-        elif action == "volume":
-            cider_api("/api/v1/playback/volume", "POST",
-                      {"volume": max(0.0, min(1.0, float(payload.get("value", 0.5))))})
-        else:
-            return {"ok": False, "error": f"unknown action '{action}'"}
-        time.sleep(0.4)  # Cider's state lags a command by a beat
-        # Anything that changes which track (or where in it) we are needs the
-        # full read back; the rest can answer from the cheap fields.
-        return self.playback(full=action in ("next", "previous", "jump", "seek"))
+        kwargs = {k: v for k, v in payload.items() if k != "action"}
+        result = prov.control(action, **kwargs)
+        result.setdefault("provider", prov.name)
+        result["capabilities"] = prov.capabilities
+        return result
 
     def month(self, ym: str) -> dict:
         """Per-day classes and events for a calendar grid."""

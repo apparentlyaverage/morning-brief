@@ -39,7 +39,8 @@ $out = Join-Path $here 'TtsHelper.dll'
     "/reference:$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\System.Runtime.WindowsRuntime.dll" `
     "/reference:$facades\System.Runtime.dll" `
     (Join-Path $here 'TtsHelper.cs') `
-    (Join-Path $here 'SystemVolume.cs')
+    (Join-Path $here 'SystemVolume.cs') `
+    (Join-Path $here 'MediaSessions.cs')
 
 if ($LASTEXITCODE -ne 0) { throw "csc failed with exit code $LASTEXITCODE" }
 Write-Host "Built $out ($((Get-Item $out).Length) bytes) against $($winmd.Name)" -ForegroundColor Green

@@ -90,5 +90,10 @@
       "^GSPC",
       "AAPL"
     ]
+  },
+  "music": {
+    "provider": "auto",
+    "app": "",
+    "_note": "auto prefers Cider and falls back to Windows media controls. 'cider' = full control (playlists, queue, volume). 'system' = drive whatever is already playing in any app (Spotify, YouTube Music, a browser tab) - transport and seek only. 'app' pins a specific source app id; blank follows whatever is active."
   }
 }
