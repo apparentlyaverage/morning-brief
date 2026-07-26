@@ -13,8 +13,22 @@
     --ink:#e6edf3; --dim:#8b97a6; --accent:#f0a05a; --accent-2:#5aa8f0;
     --ok:#4ec98a; --bad:#f0605a; --warn:#e3c05a;
     --radius:12px;
+    /* --line is decorative (card edges, dividers) at 1.37:1 on the panel.
+       Anything that is the visible boundary of a control needs 3:1 per
+       WCAG 1.4.11, so those use --line-strong: 3.92:1 on panel, 3.54:1
+       on panel-2. */
+    --line-strong:#667a91;
   }
   *{box-sizing:border-box}
+
+  /* Respect the OS "reduce motion" setting: vestibular disorders make
+     sliding panels and transforms genuinely unpleasant, not just noisy. */
+  @media (prefers-reduced-motion: reduce){
+    *, *::before, *::after{
+      animation-duration:.01ms !important; animation-iteration-count:1 !important;
+      transition-duration:.01ms !important; scroll-behavior:auto !important;
+    }
+  }
   body{
     margin:0; background:var(--bg); color:var(--ink);
     font:15px/1.55 "Segoe UI",system-ui,sans-serif;
@@ -43,7 +57,7 @@
   label{display:block; font-size:12.5px; color:var(--dim); margin-bottom:5px}
   input[type=text],input[type=time],input[type=number],select,textarea{
     width:100%; background:var(--panel-2); color:var(--ink);
-    border:1px solid var(--line); border-radius:8px; padding:9px 11px;
+    border:1px solid var(--line-strong); border-radius:8px; padding:9px 11px;
     font:inherit; font-size:14px;
   }
   textarea{resize:vertical; min-height:120px; line-height:1.6}
@@ -51,18 +65,20 @@
   .row{display:flex; gap:14px; flex-wrap:wrap}
   .row>*{flex:1 1 200px; min-width:0}
   button{
-    background:var(--panel-2); color:var(--ink); border:1px solid var(--line);
+    background:var(--panel-2); color:var(--ink); border:1px solid var(--line-strong);
     border-radius:8px; padding:9px 15px; font:inherit; font-size:13.5px; cursor:pointer;
   }
   button:hover:not(:disabled){border-color:var(--accent-2); color:#fff}
   button:disabled{opacity:.45; cursor:default}
   button.primary{background:var(--accent); color:#14161a; border-color:var(--accent); font-weight:600}
   button.primary:hover:not(:disabled){filter:brightness(1.08); color:#14161a}
-  .results{margin-top:12px; border:1px solid var(--line); border-radius:8px; overflow:hidden}
+  .results{margin-top:12px; border:1px solid var(--line-strong); border-radius:8px; overflow:hidden}
   /* Rows are <button> when the whole row is the action, so a keyboard can
-     reach them; the resets keep them looking like plain rows. */
+     reach them; the resets keep them looking like plain rows. The row
+     divider IS the only visible boundary of each control, so it carries
+     the 3:1 line rather than the decorative one. */
   .results .item{
-    padding:10px 13px; border-bottom:1px solid var(--line);
+    padding:10px 13px; border-bottom:1px solid var(--line-strong);
     display:flex; justify-content:space-between; gap:12px; align-items:center; font-size:14px;
     width:100%; text-align:left; font:inherit; font-size:14px; color:inherit;
     background:none; border-left:none; border-right:none; border-top:none; border-radius:0;
@@ -96,7 +112,7 @@
   #saveState{color:var(--dim); font-size:13px}
   #saveState.dirty{color:var(--warn)}
   .drop{
-    border:1.5px dashed var(--line); border-radius:10px; padding:26px;
+    border:1.5px dashed var(--line-strong); border-radius:10px; padding:26px;
     text-align:center; color:var(--dim); cursor:pointer; font-size:14px;
   }
   .drop.over{border-color:var(--accent); color:var(--ink); background:var(--panel-2)}
@@ -121,7 +137,7 @@
 
 <header>
   <h1>Morning <span>Brief</span></h1>
-  <a href="/dashboard" style="color:var(--dim); font-size:13px; border:1px solid var(--line);
+  <a href="/dashboard" style="color:var(--dim); font-size:13px; border:1px solid var(--line-strong);
      padding:6px 12px; border-radius:8px; text-decoration:none">Dashboard →</a>
   <div class="status" id="status"></div>
 </header>

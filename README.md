@@ -60,6 +60,22 @@ playlist. Everything else has a working default.
 Useful flags on `morning-routine.ps1`: `-IntroSeconds 5` for a quick test,
 `-NoMusic`, `-NoSpeak`, `-NoDashboard`.
 
+## Tests
+
+```powershell
+.\run-tests.ps1
+```
+
+191 tests, about a second, no network and no side effects — they redirect the
+library and calendar paths at a temp directory, and stub the market API rather
+than calling it. `-Detailed` names each test; `-Only stocks` runs one file.
+
+They cover the parts that fail quietly rather than loudly: the `.ics`
+recurrence expander, deleted-event bookkeeping that has to survive a
+re-import, JSE prices arriving in cents, reading-position clamping, and the
+academic calendar — including a check that every public holiday in the shipped
+term dates actually suppresses lectures.
+
 ## Your data stays yours
 
 `config.json`, your timetable, tasks, diary and uploaded documents are all
@@ -87,6 +103,7 @@ events_store.py     hand-added calendar events
 calendar_ics.py     .ics importer
 llm.py              Ollama client
 TtsHelper.cs        C# shim: modern Windows voices + system volume
+tests/              stdlib unittest suite (run-tests.ps1)
 ```
 
 `TtsHelper.dll` is committed so the app runs without a build step. Rebuild it
