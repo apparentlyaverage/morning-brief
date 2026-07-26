@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -53,6 +53,15 @@
   .cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:4px}
   .cal-grid .dow{color:var(--dim); font-size:11px; text-align:center;
                  text-transform:uppercase; letter-spacing:.06em; padding-bottom:4px}
+  /* Calendar days and queue rows are <button> so a keyboard can reach them.
+     These resets keep them looking exactly as they did as <div>s. */
+  .day, .qitem{
+    font:inherit; text-align:left; width:100%; color:inherit;
+    -webkit-appearance:none; appearance:none;
+  }
+  /* A visible focus ring is the whole point of making these focusable. */
+  :focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+
   .day{
     aspect-ratio:1/1; border:1px solid transparent; border-radius:8px;
     background:var(--panel-2); padding:5px 6px; cursor:pointer;
@@ -151,15 +160,16 @@
   #queueList{overflow-y:auto; padding:6px 0 90px}
   .qitem{
     display:flex; align-items:center; gap:11px; padding:8px 16px; cursor:pointer;
-    border-left:2px solid transparent;
+    border:none; border-left:2px solid transparent; background:none; border-radius:0;
   }
   .qitem:hover{background:var(--panel-2)}
   .qitem.now{border-left-color:var(--accent); background:var(--panel-2)}
   .qitem img{width:36px; height:36px; border-radius:4px; background:var(--panel-2); flex:none}
-  .qitem .qt{min-width:0; flex:1}
-  .qitem .qn{font-size:13.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  /* These were divs; as spans inside a button they need to stack explicitly. */
+  .qitem .qt{min-width:0; flex:1; display:block}
+  .qitem .qn{display:block; font-size:13.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
   .qitem.now .qn{color:var(--accent); font-weight:600}
-  .qitem .qa{font-size:12px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .qitem .qa{display:block; font-size:12px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
   .qitem .qd{font-size:11.5px; color:var(--dim); font-variant-numeric:tabular-nums; flex:none}
   .toast{position:fixed; bottom:84px; left:50%; transform:translateX(-50%);
          background:var(--panel-2); border:1px solid var(--line); border-radius:8px;
@@ -190,15 +200,15 @@
         <button class="icon" onclick="shiftMonth(1)">›</button>
       </span>
     </h2>
-    <div class="cal-grid" id="calGrid"></div>
-    <div class="daybox" id="dayBox"></div>
+    <div class="cal-grid" id="calGrid" role="group" aria-label="Month calendar"></div>
+    <div class="daybox" id="dayBox" aria-live="polite"></div>
   </section>
 
   <!-- todo ------------------------------------------------------------- -->
   <section class="card">
     <h2>To do <span class="right" id="todoCount" style="color:var(--dim); text-transform:none; letter-spacing:0; font-size:12.5px"></span></h2>
     <div class="todo-add">
-      <input id="todoInput" type="text" placeholder="Add a task, press Enter">
+      <input id="todoInput" type="text" placeholder="Add a task, press Enter" aria-label="New task">
       <button onclick="addTodo()">Add</button>
     </div>
     <div id="todoList"></div>
@@ -223,7 +233,7 @@
     <h2>Reading
       <span class="right">
         <button onclick="document.getElementById('docFile').click()">Add a document</button>
-        <input type="file" id="docFile" accept=".pdf,.txt,.md,.markdown,.text" hidden>
+        <input type="file" id="docFile" accept=".pdf,.txt,.md,.markdown,.text" hidden aria-label="Choose a document to add">
       </span>
     </h2>
     <div id="libraryList"></div>
@@ -264,7 +274,7 @@
     <span id="queueCount"></span>
     <button class="icon" onclick="toggleQueue()" title="Close">×</button>
   </div>
-  <div id="queueList"></div>
+  <div id="queueList" role="listbox" aria-label="Play queue"></div>
 </aside>
 
 <footer>
@@ -275,12 +285,15 @@
   </div>
 
   <div class="progress">
-    <span class="time" id="tElapsed">0:00</span>
-    <div class="track" id="seekTrack" title="Click to jump to a point in the song">
+    <span class="time" id="tElapsed" aria-hidden="true">0:00</span>
+    <div class="track" id="seekTrack" role="slider" tabindex="0"
+         aria-label="Seek within the track" aria-valuemin="0" aria-valuemax="0"
+         aria-valuenow="0" aria-valuetext="not playing"
+         title="Click, or focus and use the arrow keys, to jump within the song">
       <div class="fill" id="seekFill"></div>
       <div class="knob" id="seekKnob"></div>
     </div>
-    <span class="time" id="tTotal">0:00</span>
+    <span class="time" id="tTotal" aria-hidden="true">0:00</span>
   </div>
 
   <div class="transport">
@@ -289,12 +302,18 @@
     <button class="icon" onclick="pb('next')" title="Next">⏭</button>
     <button id="shuffleBtn" onclick="pb('shuffle')" title="Shuffle">🔀</button>
     <button id="repeatBtn" onclick="pb('repeat')" title="Repeat">🔁</button>
-    <input type="range" id="vol" min="0" max="100" step="5" title="Volume">
+    <input type="range" id="vol" min="0" max="100" step="5" title="Volume" aria-label="Music volume">
     <button id="queueBtn" onclick="toggleQueue()" title="Queue">☰ Queue</button>
   </div>
 </footer>
 
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+<!-- Off-screen but not hidden from assistive tech: announces changes that are
+     otherwise only visible, like a day's contents or the queue loading. -->
+<div id="announcer" aria-live="polite" aria-atomic="true"
+     style="position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;
+            clip:rect(0 0 0 0);white-space:nowrap;border:0"></div>
 
 <script>
 'use strict';
@@ -309,6 +328,16 @@ function toast(msg, bad){
   const t = $('toast'); t.textContent = msg;
   t.className = 'toast show' + (bad ? ' bad' : '');
   clearTimeout(t._t); t._t = setTimeout(() => t.className = 'toast', 2600);
+}
+
+// Speak something to assistive tech without showing it on screen. Re-setting
+// the text is what triggers the announcement, so clear it first when the same
+// message could repeat.
+function announce(msg){
+  const el = $('announcer');
+  if(!el) return;
+  el.textContent = '';
+  setTimeout(() => { el.textContent = msg; }, 50);
 }
 async function api(path, opts){
   const r = await fetch(path, opts);
@@ -389,7 +418,9 @@ function drawMonth(){
   const dows = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   let html = dows.map(d => `<div class="dow">${d}</div>`).join('');
   // first_weekday is Monday-based, matching the header above.
-  html += '<div class="day blank"></div>'.repeat(monthData.first_weekday);
+  // Spacers before the 1st. Non-interactive by design, and hidden from
+  // assistive tech so it doesn't announce empty cells.
+  html += '<div class="day blank" aria-hidden="true"></div>'.repeat(monthData.first_weekday);
 
   const today = iso(new Date());
   for(const [date, info] of Object.entries(monthData.days)){
@@ -402,14 +433,39 @@ function drawMonth(){
       ...info.classes.slice(0,4).map(() => '<span class="dot cls"></span>'),
       ...info.events.slice(0,4).map(() => '<span class="dot ev"></span>')
     ].join('');
-    html += `<div class="${cls.join(' ')}" onclick="pickDay('${date}')">
-               <span class="n">${n}</span><span class="dots">${dots}</span></div>`;
+
+    // A real <button>, not a clickable <div>: keyboard-reachable, and the
+    // label spells out what the coloured dots mean, since a screen reader
+    // gets nothing from a decorative span.
+    const full = new Date(date + 'T00:00:00')
+      .toLocaleDateString(undefined, {weekday:'long', day:'numeric', month:'long'});
+    const bits = [];
+    if(info.classes.length) bits.push(`${info.classes.length} class${info.classes.length>1?'es':''}`);
+    if(info.events.length)  bits.push(`${info.events.length} event${info.events.length>1?'s':''}`);
+    if(!info.in_term)       bits.push(info.note);
+    const label = full + (bits.length ? ', ' + bits.join(', ') : ', nothing scheduled');
+
+    html += `<button type="button" class="${cls.join(' ')}" data-date="${date}"
+               aria-label="${esc(label)}" aria-pressed="${date === selected}"
+               onclick="pickDay('${date}')">
+               <span class="n" aria-hidden="true">${n}</span>
+               <span class="dots" aria-hidden="true">${dots}</span></button>`;
   }
   $('calGrid').innerHTML = html;
   drawDay();
 }
 
-function pickDay(d){ selected = d; drawMonth(); }
+function pickDay(d){
+  selected = d;
+  drawMonth();
+  // Selecting a day rewrites the panel below; without this a screen reader
+  // user gets no indication anything happened.
+  const box = $('dayBox');
+  if(box) announce(box.innerText.replace(/\s+/g, ' ').trim().slice(0, 220));
+  // Keep focus on the day just chosen - drawMonth() replaced the button.
+  const btn = document.querySelector(`.day[data-date="${d}"]`);
+  if(btn && document.activeElement !== document.body) btn.focus();
+}
 
 function drawDay(){
   const info = monthData?.days?.[selected];
@@ -443,12 +499,12 @@ function drawDay(){
 
   const form = `
     <div id="addRow" style="display:none; gap:7px; margin-top:11px; flex-wrap:wrap">
-      <input id="evTime" type="time" style="width:104px; background:var(--panel-2); color:var(--ink);
+      <input id="evTime" type="time" aria-label="Event time" style="width:104px; background:var(--panel-2); color:var(--ink);
              border:1px solid var(--line); border-radius:7px; padding:6px 8px; font:inherit; font-size:13px">
-      <input id="evName" type="text" placeholder="What is it?" style="flex:1; min-width:130px;
+      <input id="evName" type="text" placeholder="What is it?" aria-label="Event name" style="flex:1; min-width:130px;
              background:var(--panel-2); color:var(--ink); border:1px solid var(--line);
              border-radius:7px; padding:6px 9px; font:inherit; font-size:13px">
-      <input id="evWhere" type="text" placeholder="Where (optional)" style="flex:1; min-width:110px;
+      <input id="evWhere" type="text" placeholder="Where (optional)" aria-label="Event location" style="flex:1; min-width:110px;
              background:var(--panel-2); color:var(--ink); border:1px solid var(--line);
              border-radius:7px; padding:6px 9px; font:inherit; font-size:13px">
       <button onclick="saveEvent()">Save</button>
@@ -512,9 +568,12 @@ function drawTodos(){
   $('todoCount').textContent = todos.length ? `${open} open · ${todos.length - open} done` : '';
   $('todoList').innerHTML = todos.length ? todos.map((t,i) => `
     <div class="todo ${t.done?'done':''}">
-      <input type="checkbox" ${t.done?'checked':''} onchange="toggleTodo(${i},this.checked)">
-      <span class="txt" contenteditable="true" data-i="${i}">${esc(t.text)}</span>
-      <button class="del" onclick="delTodo(${i})" title="Delete">×</button>
+      <input type="checkbox" ${t.done?'checked':''} onchange="toggleTodo(${i},this.checked)"
+             aria-label="Mark &quot;${esc(t.text)}&quot; as ${t.done ? 'not done' : 'done'}">
+      <span class="txt" contenteditable="true" role="textbox" data-i="${i}"
+            aria-label="Task: ${esc(t.text)}">${esc(t.text)}</span>
+      <button class="del" onclick="delTodo(${i})" aria-label="Delete &quot;${esc(t.text)}&quot;"
+              title="Delete">×</button>
     </div>`).join('') : '<div class="empty">Nothing on the list.</div>';
 
   $('todoList').querySelectorAll('.txt').forEach(el => {
@@ -561,6 +620,13 @@ function paintProgress(){
   $('seekKnob').style.left = pct + '%';
   $('tElapsed').textContent = mmss(elapsed);
   $('tTotal').textContent = mmss(pos.duration);
+
+  // Keep the slider's accessible value in step with the visual one.
+  const track = $('seekTrack');
+  track.setAttribute('aria-valuemax', Math.round(pos.duration || 0));
+  track.setAttribute('aria-valuenow', Math.round(elapsed || 0));
+  track.setAttribute('aria-valuetext',
+    pos.duration ? `${mmss(elapsed)} of ${mmss(pos.duration)}` : 'not playing');
 }
 
 function applyPlayback(p){
@@ -595,22 +661,40 @@ function seekFromEvent(e){
   const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
   return ratio * (pos.duration || 0);
 }
-$('seekTrack').onclick = async e => {
+// Arrow keys nudge, Home/End jump to the ends - the keyboard equivalent of
+// dragging, and what a screen reader user will expect from role="slider".
+$('seekTrack').onkeydown = e => {
   if(!pos.duration) return;
-  const target = seekFromEvent(e);
+  const step = e.shiftKey ? 30 : 5;
+  let target = null;
+  if(e.key === 'ArrowRight' || e.key === 'ArrowUp')      target = (pos.elapsed || 0) + step;
+  else if(e.key === 'ArrowLeft' || e.key === 'ArrowDown') target = (pos.elapsed || 0) - step;
+  else if(e.key === 'Home')                               target = 0;
+  else if(e.key === 'End')                                target = pos.duration - 1;
+  if(target === null) return;
+  e.preventDefault();
+  seekTo(Math.max(0, Math.min(pos.duration, target)));
+};
+
+async function seekTo(target){
+  if(!pos.duration) return;
   seeking = true;
   // Paint the new spot immediately; the server round-trip takes a moment.
   const pct = (target / pos.duration) * 100;
   $('seekFill').style.width = pct + '%';
   $('seekKnob').style.left = pct + '%';
   $('tElapsed').textContent = mmss(target);
+  $('seekTrack').setAttribute('aria-valuenow', Math.round(target));
   try{
     const p = await api('/api/playback', {method:'POST', headers:{'Content-Type':'application/json'},
                                           body: JSON.stringify({action:'seek', position: target})});
     seeking = false;
     applyPlayback(p);
+    announce(`Jumped to ${mmss(target)}`);
   }catch(err){ seeking = false; toast('Could not seek: ' + err.message, true); }
-};
+}
+
+$('seekTrack').onclick = e => { if(pos.duration) seekTo(seekFromEvent(e)); };
 
 /* --------------------------------------------------------------- queue */
 function toggleQueue(){
@@ -628,15 +712,22 @@ async function loadQueue(){
     const q = await api('/api/queue');
     $('queueCount').textContent = q.total > q.items.length
       ? `${q.items.length} of ${q.total}` : `${q.total} track${q.total === 1 ? '' : 's'}`;
-    list.innerHTML = q.items.map(it => `
-      <div class="qitem ${it.index === q.current ? 'now' : ''}" onclick="jumpTo(${it.index})">
-        <img src="${esc((it.artwork || '').replace('{w}','72').replace('{h}','72'))}" alt="">
-        <div class="qt">
-          <div class="qn">${esc(it.name || 'Unknown')}</div>
-          <div class="qa">${esc(it.artist || '')}</div>
-        </div>
+    list.innerHTML = q.items.map(it => {
+      const now = it.index === q.current;
+      const label = `${now ? 'Now playing: ' : 'Play '}${it.name || 'Unknown'}`
+                  + (it.artist ? ` by ${it.artist}` : '')
+                  + (it.seconds ? `, ${mmss(it.seconds)}` : '');
+      return `
+      <button type="button" class="qitem ${now ? 'now' : ''}" role="option"
+              aria-selected="${now}" aria-label="${esc(label)}" onclick="jumpTo(${it.index})">
+        <img src="${esc((it.artwork || '').replace('{w}','72').replace('{h}','72'))}" alt="" aria-hidden="true">
+        <span class="qt">
+          <span class="qn">${esc(it.name || 'Unknown')}</span>
+          <span class="qa">${esc(it.artist || '')}</span>
+        </span>
         <span class="qd">${mmss(it.seconds)}</span>
-      </div>`).join('') || '<div class="empty" style="padding:14px 16px">Queue is empty.</div>';
+      </button>`;
+    }).join('') || '<div class="empty" style="padding:14px 16px">Queue is empty.</div>';
     list.dataset.loaded = '1';
     const now = list.querySelector('.qitem.now');
     if(now) now.scrollIntoView({block:'nearest'});
@@ -727,16 +818,21 @@ let book = null, passage = null, audio = null;
 async function loadLibrary(){
   try{
     const {books} = await api('/api/library');
-    $('libraryList').innerHTML = books.length ? books.map(b => `
+    $('libraryList').innerHTML = books.length ? books.map(b => {
+      const pct = Math.round((b.position + 1) / b.passages * 100);
+      return `
       <div class="line">
-        <span style="flex:1; cursor:pointer" onclick="openBook('${b.id}')">
+        <button type="button" style="flex:1; cursor:pointer; background:none; border:none;
+                text-align:left; font:inherit; color:inherit; padding:0"
+                aria-label="Open ${esc(b.title)}, ${pct} percent read"
+                onclick="openBook('${b.id}')">
           <strong>${esc(b.title)}</strong>
-          <span class="w" style="margin-left:8px">${b.passages} passages ·
-            ${Math.round((b.position+1)/b.passages*100)}% in</span>
-        </span>
-        <button onclick="deleteBook('${b.id}')" style="background:none; border:none;
-          color:var(--dim); cursor:pointer; font-size:15px">×</button>
-      </div>`).join('')
+          <span class="w" style="margin-left:8px">${b.passages} passages · ${pct}% in</span>
+        </button>
+        <button onclick="deleteBook('${b.id}')" aria-label="Remove ${esc(b.title)}"
+          style="background:none; border:none; color:var(--dim); cursor:pointer; font-size:15px">×</button>
+      </div>`;
+    }).join('')
       : '<div class="empty">No documents yet. Add a PDF, text or markdown file to have it read to you.</div>';
   }catch(e){ $('libraryList').innerHTML = '<div class="empty">Could not read the library.</div>'; }
 }
