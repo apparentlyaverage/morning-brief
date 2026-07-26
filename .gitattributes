@@ -1,0 +1,20 @@
+# Normalise line endings so a clone on another machine doesn't show every file
+# as modified. Text is stored LF in the repo and checked out per-platform.
+* text=auto
+
+# PowerShell is happiest with CRLF on Windows, and these only ever run there.
+*.ps1 text eol=crlf
+
+*.py   text
+*.cs   text
+*.js   text
+*.html text
+*.json text
+*.md   text
+*.webmanifest text
+
+# Binary - never touch these.
+*.dll binary
+*.png binary
+*.mp3 binary
+*.ico binary
