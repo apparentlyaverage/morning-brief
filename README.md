@@ -11,7 +11,9 @@ get you out of bed.
 Everything is local: a Python script, a PowerShell sequence, and a small web
 server on `127.0.0.1`. No account, no cloud, no telemetry.
 
-<!-- Screenshot of the dashboard goes here: ![Dashboard](docs/dashboard.png) -->
+![The Morning Brief dashboard: a month calendar with the day's lectures, an
+editable to-do list, live weather, and the music player along the
+bottom](docs/dashboard.png)
 
 ## What it sounds like
 
