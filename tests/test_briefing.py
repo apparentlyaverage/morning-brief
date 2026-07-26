@@ -117,18 +117,22 @@ class AcademicStatus(unittest.TestCase):
                          (True, "Term 1"))
 
 
-class ShippedCalendar(unittest.TestCase):
-    """The real Rhodes calendar that ships with the project.
+class RealCalendar(unittest.TestCase):
+    """A real academic calendar, exercised end to end.
 
-    timetable.json is personal and gitignored, so these run against
-    timetable.example.json, which carries the same term and holiday data.
+    Rhodes University 2026, kept in tests/fixtures rather than shipped as the
+    default timetable: one university's term dates are wrong for everyone
+    else, and the briefing would confidently announce "Term 2" to someone who
+    has never been to Makhanda. The dates stay here because gating lectures on
+    real holidays is the part worth testing, and invented dates wouldn't catch
+    the observed-Monday case below.
     """
 
     @classmethod
     def setUpClass(cls):
-        path = ROOT / "timetable.example.json"
+        path = ROOT / "tests" / "fixtures" / "rhodes-2026.json"
         if not path.exists():
-            raise unittest.SkipTest("timetable.example.json is not present")
+            raise unittest.SkipTest("the calendar fixture is not present")
         cls.timetable = json.loads(path.read_text(encoding="utf-8-sig"))
 
     def status(self, day):
@@ -171,6 +175,59 @@ class ShippedCalendar(unittest.TestCase):
             start, end = briefing._span(block)
             with self.subTest(block=block.get("name")):
                 self.assertLessEqual(start, end)
+
+
+class ShippedExample(unittest.TestCase):
+    """timetable.example.json is what a stranger starts from.
+
+    It must stay institution-neutral. Shipping Rhodes' dates as the default
+    means anyone else is told about terms and holidays that have nothing to do
+    with them, which is worse than being told nothing.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        path = ROOT / "timetable.example.json"
+        if not path.exists():
+            raise unittest.SkipTest("timetable.example.json is not present")
+        cls.raw = path.read_text(encoding="utf-8-sig")
+        cls.timetable = json.loads(cls.raw)
+
+    def test_it_is_valid_json_with_every_weekday(self):
+        for day in ("monday", "tuesday", "wednesday", "thursday",
+                    "friday", "saturday", "sunday"):
+            with self.subTest(day=day):
+                self.assertIsInstance(self.timetable[day], list)
+
+    def test_it_ships_no_term_dates(self):
+        cal = self.timetable["_calendar"]
+        self.assertEqual(cal["terms"], [])
+        self.assertEqual(cal["no_lectures"], [])
+
+    def test_it_names_no_particular_institution(self):
+        for word in ("Rhodes", "Makhanda", "Grahamstown"):
+            with self.subTest(word=word):
+                self.assertNotIn(word, self.raw)
+
+    def test_with_no_calendar_the_briefing_assumes_classes_run(self):
+        # The documented consequence of leaving it empty.
+        running, note = briefing.academic_status(self.timetable, dt.date(2026, 8, 10))
+        self.assertTrue(running)
+        self.assertEqual(note, "")
+
+    def test_the_worked_example_lecture_is_shaped_like_a_real_one(self):
+        lecture = self.timetable["monday"][0]
+        for field in ("start", "end", "name"):
+            with self.subTest(field=field):
+                self.assertTrue(lecture[field])
+        dt.datetime.strptime(lecture["start"], "%H:%M")
+        dt.datetime.strptime(lecture["end"], "%H:%M")
+
+    def test_it_still_loads_through_the_real_loader(self):
+        original = briefing.TIMETABLE_PATH
+        briefing.TIMETABLE_PATH = ROOT / "timetable.example.json"
+        self.addCleanup(setattr, briefing, "TIMETABLE_PATH", original)
+        self.assertNotIn("_error", briefing.load_timetable())
 
 
 class FileLoading(unittest.TestCase):

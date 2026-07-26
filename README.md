@@ -75,9 +75,11 @@ than calling it. `-Detailed` names each test; `-Only stocks` runs one file.
 
 They cover the parts that fail quietly rather than loudly: the `.ics`
 recurrence expander, deleted-event bookkeeping that has to survive a
-re-import, JSE prices arriving in cents, reading-position clamping, and the
-academic calendar — including a check that every public holiday in the shipped
-term dates actually suppresses lectures.
+re-import, JSE prices arriving in cents, reading-position clamping, article
+extraction, and the academic calendar — including a check against a real
+university calendar in `tests/fixtures` that every public holiday suppresses
+lectures, and that a holiday landing on a Sunday is caught on the observed
+Monday.
 
 ## Your data stays yours
 
@@ -118,8 +120,11 @@ with `build-ttshelper.ps1` if you ever change the C# (needs the Windows SDK).
 - **Windows only.** It leans on PowerShell, Task Scheduler, WinRT and Cider's
   local API.
 - **Cider is required** for music. Spotify and YouTube Music are not supported.
-- **Term dates run out** when the academic year does — the briefing will tell
-  you when it needs the next year's added.
+- **You supply your own term dates.** `timetable.example.json` ships blank, on
+  purpose: one university's calendar is wrong for everyone else, and being
+  told about a term you aren't in is worse than being told nothing. Leave
+  `_calendar` empty and classes are simply assumed to run every weekday. Once
+  you do fill it in, the briefing tells you when the dates run out.
 - Several data sources are free, undocumented endpoints. Fine for personal
   use; they would need licensed replacements in a commercial product.
 - **"Listen in" can't read every story.** Article text is pulled out of the

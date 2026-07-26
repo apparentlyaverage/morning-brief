@@ -1,178 +1,30 @@
 {
-  "_comment": "Your weekly timetable. Times are 24h HH:MM. Put a class under every weekday it runs on. _calendar holds term dates and any day with no lectures (holidays, swot weeks, exams); the briefing checks it before listing classes.",
+  "_comment": "Copy this to timetable.json and fill it in. Times are 24h HH:MM. Put a class under every weekday it runs on - Monday's entry is a worked example, delete it. Everything here is optional: with no classes you simply won't be told about any.",
+
+  "_calendar_help": "_calendar is what stops the briefing announcing lectures on a public holiday. 'terms' are the weeks teaching actually runs; outside them you're told how long until the next one starts. 'no_lectures' is any day inside a term with no normal classes - public holidays, swot weeks, exam blocks - and it takes priority over the term it sits in. Both are ranges, so a single day has the same start and end. Leave both empty and the briefing assumes classes run every weekday, which is fine if you don't want term awareness.",
+
   "_calendar": {
-    "_source": "Rhodes University - Amended Term Dates 2026 (Acting Registrar, 30 Sept 2025)",
-    "_note": "terms = official term ranges. no_lectures = blocks inside a term with no normal classes (swot, exams, Easter). Add SA public holidays here as you hit them.",
-    "terms": [
-      {
-        "name": "Term 1",
-        "start": "2026-02-09",
-        "end": "2026-03-20"
-      },
-      {
-        "name": "Term 2",
-        "start": "2026-03-30",
-        "end": "2026-06-12"
-      },
-      {
-        "name": "Term 3",
-        "start": "2026-07-06",
-        "end": "2026-08-14"
-      },
-      {
-        "name": "Term 4",
-        "start": "2026-08-24",
-        "end": "2026-11-05"
-      }
-    ],
-    "no_lectures": [
-      {
-        "name": "New Year's Day",
-        "start": "2026-01-01",
-        "end": "2026-01-01"
-      },
-      {
-        "name": "Human Rights Day",
-        "start": "2026-03-21",
-        "end": "2026-03-21"
-      },
-      {
-        "name": "Good Friday",
-        "start": "2026-04-03",
-        "end": "2026-04-03"
-      },
-      {
-        "name": "Family Day",
-        "start": "2026-04-06",
-        "end": "2026-04-06"
-      },
-      {
-        "name": "Freedom Day",
-        "start": "2026-04-27",
-        "end": "2026-04-27"
-      },
-      {
-        "name": "Workers' Day",
-        "start": "2026-05-01",
-        "end": "2026-05-01"
-      },
-      {
-        "name": "swot week and exams",
-        "start": "2026-05-16",
-        "end": "2026-06-12"
-      },
-      {
-        "name": "Youth Day",
-        "start": "2026-06-16",
-        "end": "2026-06-16"
-      },
-      {
-        "name": "Women's Day (observed)",
-        "start": "2026-08-10",
-        "end": "2026-08-10"
-      },
-      {
-        "name": "Heritage Day",
-        "start": "2026-09-24",
-        "end": "2026-09-24"
-      },
-      {
-        "name": "swot week and exams",
-        "start": "2026-10-02",
-        "end": "2026-11-05"
-      },
-      {
-        "name": "Day of Reconciliation",
-        "start": "2026-12-16",
-        "end": "2026-12-16"
-      },
-      {
-        "name": "Christmas Day",
-        "start": "2026-12-25",
-        "end": "2026-12-25"
-      },
-      {
-        "name": "Day of Goodwill",
-        "start": "2026-12-26",
-        "end": "2026-12-26"
-      },
-      {
-        "name": "New Year's Day",
-        "start": "2027-01-01",
-        "end": "2027-01-01"
-      },
-      {
-        "name": "Human Rights Day (observed)",
-        "start": "2027-03-22",
-        "end": "2027-03-22"
-      },
-      {
-        "name": "Good Friday",
-        "start": "2027-03-26",
-        "end": "2027-03-26"
-      },
-      {
-        "name": "Family Day",
-        "start": "2027-03-29",
-        "end": "2027-03-29"
-      },
-      {
-        "name": "Freedom Day",
-        "start": "2027-04-27",
-        "end": "2027-04-27"
-      },
-      {
-        "name": "Workers' Day",
-        "start": "2027-05-01",
-        "end": "2027-05-01"
-      },
-      {
-        "name": "Youth Day",
-        "start": "2027-06-16",
-        "end": "2027-06-16"
-      },
-      {
-        "name": "Women's Day",
-        "start": "2027-08-09",
-        "end": "2027-08-09"
-      },
-      {
-        "name": "Heritage Day",
-        "start": "2027-09-24",
-        "end": "2027-09-24"
-      },
-      {
-        "name": "Day of Reconciliation",
-        "start": "2027-12-16",
-        "end": "2027-12-16"
-      },
-      {
-        "name": "Christmas Day",
-        "start": "2027-12-25",
-        "end": "2027-12-25"
-      },
-      {
-        "name": "Day of Goodwill (observed)",
-        "start": "2027-12-27",
-        "end": "2027-12-27"
-      }
-    ],
-    "_holidays_note": "South African public holidays for 2026-2027, with Sunday holidays shifted to the Monday. Extend when you add new term dates."
+    "_source": "Fill in from your own institution's published term dates, and add your country's public holidays. Note that a holiday falling on a Sunday is usually observed on the Monday - the briefing only knows what you put here.",
+    "terms": [],
+    "no_lectures": [],
+    "_example_shape": {
+      "terms": [
+        { "name": "Term 1", "start": "2027-02-08", "end": "2027-03-19" }
+      ],
+      "no_lectures": [
+        { "name": "Public holiday", "start": "2027-03-22", "end": "2027-03-22" },
+        { "name": "Swot week", "start": "2027-06-01", "end": "2027-06-05" }
+      ]
+    }
   },
+
   "monday": [
     {
       "start": "08:00",
       "end": "08:45",
       "name": "Example Lecture",
       "venue": "Main Hall",
-      "note": "delete these and add your own"
-    },
-    {
-      "start": "14:15",
-      "end": "17:00",
-      "name": "Example Practical",
-      "venue": "Lab 1",
-      "note": ""
+      "note": "delete this and add your own"
     }
   ],
   "tuesday": [],
