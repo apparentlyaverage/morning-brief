@@ -132,7 +132,10 @@ def fetch_json(url: str, timeout: int = HTTP_TIMEOUT):
 def load_config() -> dict:
     if not CONFIG_PATH.exists():
         sys.exit(f"Missing config file: {CONFIG_PATH}")
-    return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    # utf-8-sig, not utf-8: PowerShell 5.1's Set-Content -Encoding utf8 writes
+    # a BOM, so the config setup.ps1 writes on a fresh install is unreadable as
+    # plain utf-8 - the app died on its very first run. Notepad does the same.
+    return json.loads(CONFIG_PATH.read_text(encoding="utf-8-sig"))
 
 
 def save_config(cfg: dict) -> None:
@@ -438,7 +441,9 @@ def load_timetable() -> dict:
     if not TIMETABLE_PATH.exists():
         return {}
     try:
-        return json.loads(TIMETABLE_PATH.read_text(encoding="utf-8"))
+        # utf-8-sig for the same reason as the config: a timetable saved from
+        # Notepad or written by PowerShell carries a BOM.
+        return json.loads(TIMETABLE_PATH.read_text(encoding="utf-8-sig"))
     except json.JSONDecodeError as exc:
         return {"_error": f"timetable.json is not valid JSON — {exc}"}
 

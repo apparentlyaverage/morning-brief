@@ -88,37 +88,26 @@ if ($python) {
 Say ''
 Say 'Checking your settings file...'
 $configPath = Join-Path $here 'config.json'
+$examplePath = Join-Path $here 'config.example.json'
 if (Test-Path $configPath) {
     Good 'config.json already exists (left untouched)'
+} elseif (Test-Path $examplePath) {
+    # Copy the example rather than building a second starter here. It is
+    # already sanitised (no name, town, token or playlist) and it carries the
+    # things a hand-written starter kept losing: all eight verified feeds and
+    # the presenter personality.
+    $cfg = Get-Content $examplePath -Raw -Encoding UTF8 | ConvertFrom-Json
+    $cfg.name = $env:USERNAME
+    # No BOM: PowerShell 5.1's -Encoding utf8 writes one, and a BOM in front of
+    # a JSON document is exactly what broke the first run before.
+    [System.IO.File]::WriteAllText(
+        $configPath,
+        ($cfg | ConvertTo-Json -Depth 8),
+        (New-Object System.Text.UTF8Encoding $false))
+    Good 'wrote config.json from the example - set your town and playlist on the settings page'
 } else {
-    $starter = [ordered]@{
-        name = $env:USERNAME
-        city = ''
-        country = 'ZA'
-        timezone = 'Africa/Johannesburg'
-        latitude = $null
-        longitude = $null
-        units = 'metric'
-        news_limit_per_feed = 4
-        total_headlines = 12
-        speech = [ordered]@{ enabled = $true; engine = 'online'
-                             online_voice = 'en-ZA-LeahNeural'; voice = 'Mark'
-                             rate = 0; headlines = 5 }
-        cider  = [ordered]@{ enabled = $true; token = ''; playlist = ''
-                             intro_seconds = 180; play_volume = 0.6; duck_volume = 0.1
-                             outro_volume = 1; system_volume = 0.3; fade_ms = 800 }
-        verse  = [ordered]@{ enabled = $true; faith = 'christianity' }
-        stocks = [ordered]@{ enabled = $true; spoken = 3; symbols = @('^GSPC', 'AAPL') }
-        calendar_opts = [ordered]@{ days_ahead = 7; max_events = 3 }
-        llm    = [ordered]@{ enabled = $false; personality = '' }
-        feeds  = @(
-            @{ name = 'News24';         url = 'https://feeds.capi24.com/v1/Search/articles/news24/TopStories/rss' },
-            @{ name = 'Daily Maverick'; url = 'https://www.dailymaverick.co.za/dmrss/' },
-            @{ name = 'BBC World';      url = 'https://feeds.bbci.co.uk/news/world/rss.xml' }
-        )
-    }
-    $starter | ConvertTo-Json -Depth 6 | Set-Content $configPath -Encoding utf8
-    Good 'wrote a starter config.json - set your town and playlist on the settings page'
+    Bad 'config.example.json is missing, so there is nothing to start from.'
+    $issues += 'config-example'
 }
 
 # ---------------------------------------------------------------- schedule

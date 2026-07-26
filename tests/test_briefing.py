@@ -8,6 +8,7 @@ of mistake you don't notice until you've walked to campus.
 
 import datetime as dt
 import json
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -170,6 +171,65 @@ class ShippedCalendar(unittest.TestCase):
             start, end = briefing._span(block)
             with self.subTest(block=block.get("name")):
                 self.assertLessEqual(start, end)
+
+
+class FileLoading(unittest.TestCase):
+    """A fresh install must survive files written by Windows tooling.
+
+    setup.ps1 writes config.json with Set-Content -Encoding utf8, and
+    PowerShell 5.1 puts a BOM on that. Reading it as plain utf-8 raised
+    "Unexpected UTF-8 BOM" and the app died on its first ever run. Notepad
+    saves the same way, so this applies to anything hand-edited too.
+    """
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.dir = Path(tmp.name)
+
+    def redirect(self, name, path):
+        original = getattr(briefing, name)
+        setattr(briefing, name, path)
+        self.addCleanup(setattr, briefing, name, original)
+
+    def test_config_with_a_bom_loads(self):
+        path = self.dir / "config.json"
+        path.write_text(json.dumps({"name": "Sam", "city": "Makhanda"}),
+                        encoding="utf-8-sig")
+        self.redirect("CONFIG_PATH", path)
+        self.assertEqual(briefing.load_config()["city"], "Makhanda")
+
+    def test_config_without_a_bom_still_loads(self):
+        path = self.dir / "config.json"
+        path.write_text(json.dumps({"name": "Sam", "city": "Makhanda"}), encoding="utf-8")
+        self.redirect("CONFIG_PATH", path)
+        self.assertEqual(briefing.load_config()["city"], "Makhanda")
+
+    def test_timetable_with_a_bom_loads(self):
+        path = self.dir / "timetable.json"
+        path.write_text(json.dumps({"monday": [{"name": "Stats", "start": "08:00"}]}),
+                        encoding="utf-8-sig")
+        self.redirect("TIMETABLE_PATH", path)
+        self.assertEqual(len(briefing.load_timetable()["monday"]), 1)
+
+    def test_a_missing_timetable_is_not_fatal(self):
+        self.redirect("TIMETABLE_PATH", self.dir / "nope.json")
+        self.assertEqual(briefing.load_timetable(), {})
+
+    def test_a_broken_timetable_reports_itself_rather_than_crashing(self):
+        path = self.dir / "timetable.json"
+        path.write_text("{not json", encoding="utf-8")
+        self.redirect("TIMETABLE_PATH", path)
+        self.assertIn("_error", briefing.load_timetable())
+
+    def test_non_ascii_survives_either_encoding(self):
+        for enc in ("utf-8", "utf-8-sig"):
+            with self.subTest(encoding=enc):
+                path = self.dir / f"config-{enc}.json"
+                path.write_text(json.dumps({"city": "Gqeberha", "name": "Zoë"},
+                                           ensure_ascii=False), encoding=enc)
+                self.redirect("CONFIG_PATH", path)
+                self.assertEqual(briefing.load_config()["name"], "Zoë")
 
 
 class SayTime(unittest.TestCase):
