@@ -125,15 +125,49 @@
      apply to this border. Outlining every card would also make the news
      grid read as a wall of boxes. */
   .story{
-    display:block; background:var(--panel-2); border:1px solid var(--line);
-    border-radius:10px; padding:14px 15px; transition:border-color .15s, transform .15s;
+    display:flex; flex-direction:column; background:var(--panel-2);
+    border:1px solid var(--line); border-radius:10px; padding:14px 15px;
+    transition:border-color .15s, transform .15s;
+    /* Anchor for the headline's click overlay, below. */
+    position:relative;
   }
   .story:hover{border-color:var(--accent); transform:translateY(-2px)}
   .story .src{font-size:11px; text-transform:uppercase; letter-spacing:.07em;
               color:var(--accent); margin-bottom:6px}
   .story .hl{font-size:14.5px; line-height:1.45; font-weight:500}
+  /* The whole card opens the story, but only the headline is a link in the
+     accessibility tree - a button can't live inside an <a>, and screen-reader
+     users shouldn't meet the same destination twice. The overlay gives the
+     card its big click target without duplicating the link. */
+  a.hl::after{content:""; position:absolute; inset:0; border-radius:10px}
+  a.hl{color:inherit; text-decoration:none}
   .story .sm{font-size:12.5px; color:var(--dim); margin-top:7px; line-height:1.5}
   .story.nolink{cursor:default} .story.nolink:hover{transform:none; border-color:var(--line)}
+
+  /* Controls must sit above the overlay or the card link swallows the click. */
+  .story-foot{margin-top:auto; padding-top:11px; display:flex; justify-content:flex-end;
+              position:relative; z-index:1}
+  .listen{font-size:12px; padding:5px 11px; display:inline-flex; align-items:center; gap:6px}
+  .listen[aria-busy="true"]{color:var(--accent); border-color:var(--accent)}
+  .listen:disabled{opacity:.55}
+
+  /* now-reading panel */
+  .reading{
+    border:1px solid var(--accent); border-radius:10px; background:var(--panel-2);
+    padding:14px 16px; margin-bottom:14px;
+  }
+  .reading .top{display:flex; align-items:flex-start; gap:12px; margin-bottom:8px}
+  .reading .who{font-size:11px; text-transform:uppercase; letter-spacing:.07em;
+                color:var(--accent)}
+  .reading .what{font-size:14.5px; font-weight:500; line-height:1.4}
+  .reading .state{font-size:12.5px; color:var(--dim); margin-top:3px}
+  .reading .acts{margin-left:auto; display:flex; gap:6px; flex:none}
+  .reading .script{
+    font-size:13.5px; line-height:1.62; color:var(--ink); white-space:pre-wrap;
+    max-height:230px; overflow:auto; border-top:1px solid var(--line);
+    padding-top:10px; margin-top:4px;
+  }
+  .reading .note{font-size:12px; color:var(--warn); margin-top:8px}
 
   /* player */
   footer{
@@ -286,6 +320,7 @@
         <button onclick="refreshBriefing(this)">Refresh</button>
       </span>
     </h2>
+    <div id="readingPanel"></div>
     <div class="cards" id="newsCards"></div>
   </section>
 </main>
@@ -403,19 +438,205 @@ async function loadBriefing(){
 
     const cards = (data.headlines || []).map(h => {
       const linked = !!h.link;
-      const tag = linked ? 'a' : 'div';
-      const attrs = linked
-        ? `class="story" href="${esc(h.link)}" target="_blank" rel="noopener noreferrer"`
-        : 'class="story nolink"';
-      return `<${tag} ${attrs}>
+      const headline = linked
+        ? `<a class="hl" href="${esc(h.link)}" target="_blank" rel="noopener noreferrer">${esc(h.title)}</a>`
+        : `<div class="hl">${esc(h.title)}</div>`;
+      // The listen button needs the story's details, and stashing them in data
+      // attributes keeps them escaped once rather than re-quoted into onclick.
+      const foot = linked ? `<div class="story-foot">
+          <button class="listen" data-url="${esc(h.link)}" data-title="${esc(h.title)}"
+                  data-source="${esc(h.source)}"
+                  aria-label="Listen in on: ${esc(h.title)}">🎧 Listen in</button>
+        </div>` : '';
+      return `<div class="story${linked ? '' : ' nolink'}">
         <div class="src">${esc(h.source)}</div>
-        <div class="hl">${esc(h.title)}</div>
+        ${headline}
         ${h.summary ? `<div class="sm">${esc(h.summary.slice(0,150))}${h.summary.length>150?'…':''}</div>` : ''}
-      </${tag}>`;
+        ${foot}
+      </div>`;
     }).join('');
     $('newsCards').innerHTML = cards || '<div class="empty">No headlines.</div>';
   }catch(e){ toast('Briefing failed to load: ' + e.message, true); }
 }
+
+/* --------------------------------------------------------------- listen in
+
+   Click a story's "Listen in" and the server fetches the article, has the
+   local model talk it through, and synthesises it. That can take the better
+   part of a minute, so the button reports which stage it's on rather than
+   just spinning.
+
+   The music keeps playing underneath, ducked. We read Cider's current volume
+   first and restore to exactly that, rather than to the configured play
+   volume - whatever you had it set at is what you want back.             */
+
+const listen = {busy:false, audio:null, duckedFrom:null, btn:null};
+
+// A 44-byte silent WAV. Playing this the instant you click "Listen in" is what
+// keeps the browser willing to play the real audio a minute later: a click
+// only authorises playback for a few seconds, and fetching the article,
+// waiting on the model and synthesising the voice takes far longer than that.
+// Without this the audio loads perfectly and then refuses to start.
+const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAgD4A' +
+                   'AAB9AAACABAAZGF0YQAAAAA=';
+
+async function duck(){
+  try{
+    const now = await api('/api/playback?full=0');
+    if(!now.playing) return;                       // nothing to duck
+    const cfg = ((await api('/api/config')).config || {}).cider || {};
+    // Never duck without knowing what to go back to. If Cider didn't report a
+    // volume, fall back to the configured play level - leaving the music stuck
+    // quiet is a far worse outcome than restoring it to slightly the wrong spot.
+    listen.duckedFrom = typeof now.volume === 'number'
+      ? now.volume
+      : Number(cfg.play_volume ?? 0.6);
+    await api('/api/playback', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({action:'volume', value: Number(cfg.duck_volume ?? 0.1)})});
+  }catch(e){ /* no Cider, or it's closed - speaking without ducking is fine */ }
+}
+
+// Closing the tab mid-segment would otherwise leave the music ducked, with
+// nothing left running to put it back. fetch() is unreliable during unload,
+// so this goes out as a beacon.
+window.addEventListener('pagehide', () => {
+  if(listen.duckedFrom === null) return;
+  try{
+    navigator.sendBeacon('/api/playback', new Blob(
+      [JSON.stringify({action:'volume', value: listen.duckedFrom})],
+      {type:'application/json'}));
+  }catch(e){}
+});
+
+async function unduck(){
+  if(listen.duckedFrom === null) return;
+  const back = listen.duckedFrom;
+  listen.duckedFrom = null;
+  try{
+    await api('/api/playback', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({action:'volume', value: back})});
+  }catch(e){ /* nothing we can do from here */ }
+}
+
+function readingPanel(story, state, script, note){
+  $('readingPanel').innerHTML = `
+    <div class="reading">
+      <div class="top">
+        <div>
+          <div class="who">${esc(story.source)}</div>
+          <div class="what">${esc(story.title)}</div>
+          <div class="state" id="readingState">${esc(state)}</div>
+        </div>
+        <div class="acts"><button onclick="stopListening()">Stop</button></div>
+      </div>
+      ${script ? `<div class="script">${esc(script)}</div>` : ''}
+      ${note ? `<div class="note">${esc(note)}</div>` : ''}
+    </div>`;
+}
+
+function setReadingState(text){
+  const el = $('readingState');
+  if(el) el.textContent = text;
+}
+
+function stopListening(){
+  if(listen.audio){
+    listen.audio.pause();
+    // Only blob: URLs need revoking; the silent unlock clip is a data: URI.
+    if(listen.audio.src.startsWith('blob:')) URL.revokeObjectURL(listen.audio.src);
+    listen.audio = null;
+  }
+  unduck();
+  $('readingPanel').innerHTML = '';
+  if(listen.btn){
+    listen.btn.disabled = false;
+    listen.btn.removeAttribute('aria-busy');
+    listen.btn.textContent = '🎧 Listen in';
+    listen.btn = null;
+  }
+  listen.busy = false;
+  announce('Stopped.');
+}
+
+async function listenIn(btn){
+  if(listen.busy){ toast('Already reading one — stop that first.'); return; }
+  const story = {url: btn.dataset.url, title: btn.dataset.title, source: btn.dataset.source};
+
+  // Do this before the first await, while the click still counts as a gesture.
+  const audio = new Audio(SILENT_WAV);
+  audio.play().catch(() => {});
+  listen.audio = audio;
+
+  listen.busy = true;
+  listen.btn = btn;
+  btn.disabled = true;
+  btn.setAttribute('aria-busy', 'true');
+  btn.textContent = '🎧 Reading up…';
+  readingPanel(story, 'Fetching the article and writing the segment…');
+  announce('Reading up on ' + story.title);
+
+  let res;
+  try{
+    res = await api('/api/listen', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(story)});
+  }catch(e){
+    toast(e.message, true);
+    announce("Couldn't read that one: " + e.message);
+    stopListening();
+    return;
+  }
+  if(!listen.busy) return;                      // stopped while we waited
+
+  readingPanel(story, 'Synthesising the voice…', res.script, res.note);
+  btn.textContent = '🎧 Speaking…';
+
+  let blob;
+  try{
+    const r = await fetch('/api/read', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({text: res.script})});
+    if(!r.ok){
+      let msg = 'speech failed';
+      try{ msg = (await r.json()).error || msg; }catch(_){}
+      throw new Error(msg);
+    }
+    blob = await r.blob();
+  }catch(e){
+    toast(e.message, true);
+    setReadingState("Couldn't speak that: " + e.message);
+    announce("Couldn't speak that one.");
+    if(listen.btn){ listen.btn.disabled = false; listen.btn.removeAttribute('aria-busy');
+                    listen.btn.textContent = '🎧 Listen in'; listen.btn = null; }
+    listen.busy = false;
+    return;
+  }
+  if(!listen.busy){ return; }
+
+  await duck();
+  setReadingState('Playing');
+  announce('Playing the segment on ' + story.title);
+
+  // Same element we primed on the click - swapping the source keeps the
+  // permission it was granted then.
+  audio.src = URL.createObjectURL(blob);
+  audio.addEventListener('ended', stopListening);
+  audio.addEventListener('error', () => {
+    toast("Couldn't play that audio", true);
+    stopListening();
+  });
+  try{
+    await audio.play();
+  }catch(e){
+    toast('Playback was blocked by the browser', true);
+    setReadingState('Blocked by the browser — click Listen in again.');
+    stopListening();
+  }
+}
+
+// Delegated so cards can be re-rendered without rebinding anything.
+document.addEventListener('click', ev => {
+  const btn = ev.target.closest('.listen');
+  if(btn){ ev.preventDefault(); listenIn(btn); }
+});
 
 async function refreshBriefing(btn){
   const old = btn.textContent; btn.textContent = 'Working…'; btn.disabled = true;

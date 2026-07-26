@@ -22,10 +22,12 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+import article
 import briefing
 import calendar_ics
 import documents
 import events_store
+import llm
 import scripture
 import stocks
 
@@ -276,6 +278,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": True, "book": book})
             if route == "/api/read":
                 return self.read_passage(json.loads(self._body() or b"{}"))
+            if route == "/api/listen":
+                return self._json(self.listen_in(json.loads(self._body() or b"{}")))
             if route == "/api/playback":
                 return self._json(self.playback_action(json.loads(self._body() or b"{}")))
         except urllib.error.HTTPError as exc:
@@ -467,11 +471,16 @@ class Handler(BaseHTTPRequestHandler):
             playing = cider_api("/api/v1/playback/is-playing").get("is_playing", False)
             shuffle = cider_api("/api/v1/playback/shuffle-mode").get("value", 0)
             repeat = cider_api("/api/v1/playback/repeat-mode").get("value", 0)
+            # The field is "volume", not "value" like the modes above.
+            # Reported so a caller that ducks the music can put it back exactly
+            # where it found it rather than guessing from config.
+            volume = cider_api("/api/v1/playback/volume").get("volume")
         except Exception as exc:
             return {"ok": False, "error": f"Cider unreachable ({type(exc).__name__})"}
 
         out = {"ok": True, "playing": bool(playing),
-               "shuffle": int(shuffle or 0), "repeat": int(repeat or 0), "full": full}
+               "shuffle": int(shuffle or 0), "repeat": int(repeat or 0),
+               "volume": float(volume) if volume is not None else None, "full": full}
         if not full:
             return out
 
@@ -672,6 +681,67 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, out.read_bytes(), "audio/mpeg")
         finally:
             out.unlink(missing_ok=True)
+
+    def listen_in(self, payload: dict) -> dict:
+        """Fetch one story, have the model talk it through, return the script.
+
+        The browser then posts the script to /api/read for audio, which is why
+        no speech happens here. Two round trips rather than one so the button
+        can say what it's doing - fetching a page and waiting on a local model
+        are very different waits, and together they can run to a minute.
+        """
+        url = (payload.get("url") or "").strip()
+        title = (payload.get("title") or "").strip()
+        source = (payload.get("source") or "").strip()
+        if not url:
+            return {"ok": False, "error": "no article link to open"}
+
+        found = article.fetch_article(url)
+        if not found["ok"]:
+            return {"ok": False, "error": found["error"]}
+        body = found["text"]
+
+        llm_cfg = load_json(CONFIG, {}).get("llm") or {}
+        personality = (llm_cfg.get("personality") or "").strip()
+        script = None
+        note = ""
+
+        if llm_cfg.get("enabled") and personality:
+            base_url = str(llm_cfg.get("base_url") or OLLAMA)
+            model = (llm_cfg.get("model") or "").strip()
+            if not model:
+                # Same courtesy as the briefing: a fresh install with one
+                # pulled model should work without naming it first.
+                available = llm.list_models(base_url, timeout=4)
+                model = available[0] if available else ""
+            if model:
+                script = llm.generate(
+                    article.build_prompt(personality, title or "(untitled)", source, body),
+                    model=model,
+                    base_url=base_url,
+                    timeout=int(llm_cfg.get("timeout", 120) or 120),
+                    temperature=float(llm_cfg.get("temperature", 0.4) or 0.4),
+                    # Without this a reasoning model spends its whole budget
+                    # thinking and returns an empty string - measured 0/4
+                    # usable at 600 tokens, 5/5 at 16000.
+                    max_tokens=int(llm_cfg.get("max_tokens", 16000) or 16000),
+                )
+                if not script:
+                    note = "the model didn't answer, so this is the article as written"
+            else:
+                note = "Ollama has no models, so this is the article as written"
+        elif not llm_cfg.get("enabled"):
+            note = "Ollama is switched off, so this is the article as written"
+        else:
+            note = "no model configured, so this is the article as written"
+
+        if not script:
+            script = article.plain_script(title, source, body)
+
+        return {"ok": True, "script": script.strip(), "title": title,
+                "source": source, "url": found["url"], "note": note,
+                "words": len(script.split()), "article_words": found["words"],
+                "method": found["method"], "llm": bool(note == "")}
 
     def set_schedule(self, payload: dict) -> dict:
         when = str(payload.get("time", "")).strip()

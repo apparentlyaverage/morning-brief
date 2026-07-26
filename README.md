@@ -16,6 +16,9 @@ Built for a student in Makhanda, South Africa, so the defaults lean that way
 - **Calendar** — import an `.ics`, or add events by hand
 - **Markets** — shares, indices and crypto, including JSE tickers
 - **News** — South African and world RSS, deduplicated across sources
+- **Listen in** — click any story and the model reads the *article*, not the
+  headline, aloud. The music keeps playing underneath, ducked, and comes back
+  to exactly where you had it
 - **Verse of the day** — Bible, Qur'an or Bhagavad Gita, quoted verbatim
 - **Spoken aloud** in a neural voice, with an offline fallback
 - **Optional local model** (via Ollama) rewrites it in a voice you define
@@ -66,7 +69,7 @@ Useful flags on `morning-routine.ps1`: `-IntroSeconds 5` for a quick test,
 .\run-tests.ps1
 ```
 
-191 tests, about a second, no network and no side effects — they redirect the
+217 tests, about a second and a half, no network and no side effects — they redirect the
 library and calendar paths at a temp directory, and stub the market API rather
 than calling it. `-Detailed` names each test; `-Only stocks` runs one file.
 
@@ -101,6 +104,7 @@ stocks.py           market quotes
 documents.py        document library and reading position
 events_store.py     hand-added calendar events
 calendar_ics.py     .ics importer
+article.py          pulls the readable body out of a news page
 llm.py              Ollama client
 TtsHelper.cs        C# shim: modern Windows voices + system volume
 tests/              stdlib unittest suite (run-tests.ps1)
@@ -118,3 +122,9 @@ with `build-ttshelper.ps1` if you ever change the C# (needs the Windows SDK).
   you when it needs the next year's added.
 - Several data sources are free, undocumented endpoints. Fine for personal
   use; they would need licensed replacements in a commercial product.
+- **"Listen in" can't read every story.** Article text is pulled out of the
+  page by heuristic, and some pages don't cooperate — eNCA renders its body
+  without paragraph tags, and short photo pieces have nothing to extract. You
+  get a message saying so rather than a broken segment. It also reads whatever
+  the page gives it: if a story is paywalled, that's the teaser, not the
+  article.
