@@ -1,0 +1,38 @@
+# ---------------------------------------------------------------- secrets
+# config.json holds your Cider API token. Never commit it.
+# Copy config.example.json to config.json and fill it in (setup.ps1 does this).
+config.json
+*.bak
+
+# ------------------------------------------------------------ personal data
+# Your timetable, tasks, diary and reading position are yours, not the project's.
+timetable.json
+todos.json
+events.json
+calendar.json
+library/
+
+# ------------------------------------------------------- generated at runtime
+briefing.txt
+briefing-spoken*.txt
+briefing_data.json
+run-log.txt
+llm_status.json
+verse_cache.json
+stock_cache.json
+_upload.ics
+_preview.mp3
+_read_*.mp3
+
+# ------------------------------------------------------------------- python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# --------------------------------------------------------------------- misc
+*.err
+*.out
+Thumbs.db
+desktop.ini
+.DS_Store
