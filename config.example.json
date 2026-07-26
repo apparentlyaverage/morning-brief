@@ -1,0 +1,94 @@
+{
+  "name": "",
+  "city": "",
+  "country": "ZA",
+  "timezone": "Africa/Johannesburg",
+  "latitude": null,
+  "longitude": null,
+  "units": "metric",
+  "news_limit_per_feed": 4,
+  "total_headlines": 12,
+  "speech": {
+    "enabled": true,
+    "engine": "online",
+    "online_voice": "en-ZA-LeahNeural",
+    "voice": "David",
+    "rate": 0,
+    "headlines": 5,
+    "_note": "engine 'online' uses the neural voice in online_voice and falls back to the offline voice in 'voice' if the network or the service is unavailable. Set engine to 'offline' to stay local. List voices: python say_online.py --list --out x"
+  },
+  "cider": {
+    "enabled": true,
+    "token": "",
+    "playlist": "",
+    "intro_seconds": 180,
+    "play_volume": 0.6,
+    "duck_volume": 0.1,
+    "outro_volume": 1,
+    "system_volume": 0.3,
+    "fade_ms": 800,
+    "_token_hint": "Cider > Settings > Connectivity > External API. You can paste this on the settings page instead of editing this file."
+  },
+  "feeds": [
+    {
+      "name": "News24",
+      "url": "https://feeds.capi24.com/v1/Search/articles/news24/TopStories/rss"
+    },
+    {
+      "name": "News24 SA",
+      "url": "https://feeds.capi24.com/v1/Search/articles/news24/SouthAfrica/rss"
+    },
+    {
+      "name": "Daily Maverick",
+      "url": "https://www.dailymaverick.co.za/dmrss/"
+    },
+    {
+      "name": "eNCA",
+      "url": "https://www.enca.com/rss.xml"
+    },
+    {
+      "name": "SABC News",
+      "url": "https://www.sabcnews.com/sabcnews/feed/"
+    },
+    {
+      "name": "BusinessTech",
+      "url": "https://businesstech.co.za/news/feed/"
+    },
+    {
+      "name": "Moneyweb",
+      "url": "https://www.moneyweb.co.za/feed/"
+    },
+    {
+      "name": "BBC World",
+      "url": "https://feeds.bbci.co.uk/news/world/rss.xml"
+    }
+  ],
+  "llm": {
+    "enabled": false,
+    "base_url": "http://127.0.0.1:11434",
+    "temperature": 0.4,
+    "max_words": 0,
+    "personality": "You host a small breakfast radio show and the listener is the only person tuned in. You've just faded out a song. Open with a line or two that lands the moment - the day, the weather, whatever's actually true - then talk through what's on and the headlines like you're speaking, not reading. Group related stories together. Be properly funny where there's room and completely straight where there isn't: never make light of a death, an accident or someone's misfortune. Never invent a detail that isn't in the notes. No lists, no headings, no stage directions - every word is spoken aloud.",
+    "model": "",
+    "fallback_model": "",
+    "timeout": 120,
+    "max_tokens": 16000,
+    "_note": "enabled=false until you pull a model (ollama pull llama3.1:8b) and name it in 'model'. max_words 0 means no length cap - a number makes the model count instead of write. Reasoning models need max_tokens in the thousands or they return an empty response."
+  },
+  "calendar_opts": {
+    "days_ahead": 7,
+    "max_events": 3
+  },
+  "verse": {
+    "enabled": false,
+    "faith": "christianity"
+  },
+  "stocks": {
+    "enabled": true,
+    "spoken": 3,
+    "symbols": [
+      "^GSPC",
+      "AAPL"
+    ]
+  }
+}
