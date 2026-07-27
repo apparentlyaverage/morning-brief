@@ -183,32 +183,57 @@
   }
   .reading .note{font-size:12px; color:var(--warn); margin-top:8px}
 
-  /* frequently used */
-  .sc-cols{display:grid; gap:18px; grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+  /* frequently used — tiles, the shape everyone already knows from a
+     browser's new-tab shortcuts and the taskbar */
+  .sc-grid{display:grid; gap:6px 2px;
+           grid-template-columns:repeat(auto-fill,minmax(84px,1fr))}
   .sc-head{font-size:11px; text-transform:uppercase; letter-spacing:.07em;
-           color:var(--accent); margin-bottom:8px}
-  .sc-row{display:flex; align-items:center; gap:6px; margin-bottom:6px}
-  /* The whole row opens the thing, so it is a button, not a div with a
-     click handler - it has to be reachable by keyboard like everything else. */
+           color:var(--accent); margin:2px 0 10px}
+  .sc-tile{position:relative}
+  /* A real button: the tile is the control, so it must be focusable and
+     announce itself like one. */
   .sc-open{
-    flex:1; min-width:0; text-align:left; display:flex; align-items:baseline; gap:9px;
-    background:var(--panel-2); border:1px solid var(--line-strong); border-radius:8px;
-    padding:8px 11px; font:inherit; color:var(--ink); cursor:pointer;
+    width:100%; display:flex; flex-direction:column; align-items:center; gap:7px;
+    background:none; border:1px solid transparent; border-radius:12px;
+    padding:10px 4px 8px; font:inherit; color:var(--ink); cursor:pointer;
   }
-  .sc-open:hover{border-color:var(--accent); color:#fff}
-  .sc-open .name{font-size:13.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-  .sc-open .meta{margin-left:auto; font-size:11.5px; color:var(--dim); white-space:nowrap}
-  .sc-open.pinned .name::before{content:"★ "; color:var(--accent)}
+  .sc-open:hover{background:var(--panel-2); border-color:var(--line-strong)}
+  .sc-ico{
+    width:48px; height:48px; border-radius:12px; flex:none;
+    display:flex; align-items:center; justify-content:center;
+    background:var(--panel-2); overflow:hidden;
+  }
+  .sc-ico img{width:32px; height:32px; object-fit:contain; display:block}
+  /* No icon: a lettered tile, same as a browser does for a site with no
+     favicon. The hue is derived from the name so it stays put between loads. */
+  .sc-ico.letter{font-size:21px; font-weight:600; color:#14161a}
+  .sc-open .name{
+    font-size:11.5px; line-height:1.25; text-align:center; color:var(--ink);
+    width:100%; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2;
+    -webkit-box-orient:vertical; word-break:break-word;
+  }
+  .sc-open.pinned .sc-ico::after{
+    content:""; position:absolute; top:8px; right:10px; width:7px; height:7px;
+    border-radius:50%; background:var(--accent);
+  }
+  /* Drop button rides in the corner, revealed on hover or keyboard focus. */
   .sc-drop{
-    flex:none; width:30px; padding:8px 0; text-align:center; line-height:1;
-    background:none; border:1px solid transparent; border-radius:8px;
-    color:var(--dim); cursor:pointer; font-size:15px;
+    position:absolute; top:4px; right:2px; width:22px; height:22px; padding:0;
+    line-height:1; border-radius:50%; border:1px solid var(--line-strong);
+    background:var(--panel); color:var(--dim); cursor:pointer; font-size:13px;
+    opacity:0; transition:opacity .12s;
   }
+  .sc-tile:hover .sc-drop, .sc-drop:focus-visible{opacity:1}
   .sc-drop:hover{color:var(--bad); border-color:var(--bad)}
-  .sc-add{display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap}
+  /* The add tile mirrors the others so the row reads as one set. */
+  .sc-open.add .sc-ico{border:1px dashed var(--line-strong); background:none;
+                       font-size:24px; color:var(--dim)}
+  .sc-open.add .name{color:var(--dim)}
+  .sc-add{display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap}
   .sc-add input{flex:1 1 170px; min-width:0}
   .sc-add select{flex:0 0 130px}
   .sc-empty{color:var(--dim); font-size:13px; padding:6px 2px}
+  @media (prefers-reduced-motion: reduce){ .sc-drop{transition:none} }
 
   /* player */
   footer{
@@ -327,16 +352,10 @@
       <input id="scTarget" type="text" placeholder="example.com  ·  or C:\path\to\app.exe" aria-label="Address or path">
       <button class="primary" onclick="addShortcut()">Add</button>
     </div>
-    <div class="sc-cols">
-      <div>
-        <div class="sc-head">Sites</div>
-        <div id="scSites"></div>
-      </div>
-      <div>
-        <div class="sc-head">Apps</div>
-        <div id="scApps"></div>
-      </div>
-    </div>
+    <div class="sc-head">Sites</div>
+    <div class="sc-grid" id="scSites"></div>
+    <div class="sc-head" style="margin-top:18px">Apps</div>
+    <div class="sc-grid" id="scApps"></div>
   </section>
 
   <!-- markets ---------------------------------------------------------- -->
@@ -552,22 +571,65 @@ async function loadShortcuts(){
   }
 }
 
+// Swap a missing icon for a lettered tile. The parent has to be read before
+// the image is detached - reading this.parentNode after .remove() gives null,
+// which silently leaves an empty square.
+function letterTile(img){
+  const box = img.parentNode;
+  if(!box) return;
+  const {letter, hue} = img.dataset;
+  img.remove();
+  box.classList.add('letter');
+  // 68% lightness, not 62%: swept every hue against the tile's dark text and
+  // blue bottomed out at 4.29:1. 68% is the first value with headroom over
+  // the 4.5 minimum right around the wheel.
+  box.style.background = `hsl(${hue || 0} 45% 68%)`;
+  box.textContent = letter || '?';
+}
+
+// A stable colour per name, so a lettered tile doesn't change hue on reload.
+function tileHue(text){
+  let h = 0;
+  for(const ch of text) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  return h;
+}
+
 function renderShortcuts(where, rows, emptyMsg){
-  if(!rows || !rows.length){
-    $(where).innerHTML = `<div class="sc-empty">${esc(emptyMsg)}</div>`;
-    return;
-  }
-  $(where).innerHTML = rows.map(r => `
-    <div class="sc-row">
+  const tiles = (rows || []).map(r => {
+    const initial = (r.label || '?').replace(/^www\./, '').charAt(0).toUpperCase();
+    // The <img> is optimistic: a 404 means no icon exists, and onerror
+    // swaps in the lettered tile rather than leaving a broken image.
+    return `
+    <div class="sc-tile">
       <button class="sc-open${r.source === 'pinned' ? ' pinned' : ''}"
-              data-id="${esc(r.id)}" aria-label="Open ${esc(r.label)}">
+              data-id="${esc(r.id)}"
+              aria-label="Open ${esc(r.label)}${r.detail ? ' — ' + esc(r.detail) : ''}"
+              title="${esc(r.label)}${r.detail ? ' · ' + esc(r.detail) : ''}">
+        <span class="sc-ico">
+          <img src="/api/shortcut-icon?id=${encodeURIComponent(r.id)}" alt=""
+               data-letter="${esc(initial)}" data-hue="${tileHue(r.label)}"
+               onerror="letterTile(this)">
+        </span>
         <span class="name">${esc(r.label)}</span>
-        <span class="meta">${esc(r.detail || '')}</span>
       </button>
       <button class="sc-drop" data-drop="${esc(r.id)}"
               aria-label="Remove ${esc(r.label)} from this panel"
               title="Remove from this panel">×</button>
-    </div>`).join('');
+    </div>`;
+  });
+
+  // The add tile sits at the end of the row, like a browser's shortcut bar.
+  tiles.push(`
+    <div class="sc-tile">
+      <button class="sc-open add" onclick="toggleShortcutAdd()"
+              aria-label="Add a shortcut">
+        <span class="sc-ico">+</span>
+        <span class="name">Add shortcut</span>
+      </button>
+    </div>`);
+
+  $(where).innerHTML = (rows && rows.length ? '' : `<div class="sc-empty">${esc(emptyMsg)}</div>`)
+                     + tiles.join('');
 }
 
 async function openShortcut(id, btn){

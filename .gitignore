@@ -39,3 +39,7 @@ venv/
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# Extracted app icons and favicons, rebuilt on demand from your own
+# browser cache and installed packages.
+icon_cache/

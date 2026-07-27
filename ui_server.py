@@ -28,6 +28,7 @@ import briefing
 import calendar_ics
 import documents
 import events_store
+import icons
 import llm
 import scripture
 import shortcuts
@@ -201,6 +202,20 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": True, "todos": load_json(TODOS, [])})
             if route == "/api/shortcuts":
                 return self._json({"ok": True, **shortcuts.listing()})
+            if route == "/api/shortcut-icon":
+                row = shortcuts.resolve(query.get("id", [""])[0])
+                data = icons.for_shortcut(row) if row else None
+                if not data:
+                    # The panel draws a lettered tile instead; a 404 is the
+                    # signal for that, not an error worth showing anyone.
+                    return self._send(404, b"", "text/plain")
+                self.send_response(200)
+                self.send_header("Content-Type", "image/png")
+                self.send_header("Content-Length", str(len(data)))
+                # Icons change about never; let the browser keep them.
+                self.send_header("Cache-Control", "public, max-age=86400")
+                self.end_headers()
+                return self.wfile.write(data)
             if route == "/api/playback":
                 return self._json(self.playback(query.get("full", ["1"])[0] != "0"))
             if route == "/api/month":
