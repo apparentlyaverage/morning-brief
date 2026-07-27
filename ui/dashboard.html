@@ -183,6 +183,33 @@
   }
   .reading .note{font-size:12px; color:var(--warn); margin-top:8px}
 
+  /* frequently used */
+  .sc-cols{display:grid; gap:18px; grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+  .sc-head{font-size:11px; text-transform:uppercase; letter-spacing:.07em;
+           color:var(--accent); margin-bottom:8px}
+  .sc-row{display:flex; align-items:center; gap:6px; margin-bottom:6px}
+  /* The whole row opens the thing, so it is a button, not a div with a
+     click handler - it has to be reachable by keyboard like everything else. */
+  .sc-open{
+    flex:1; min-width:0; text-align:left; display:flex; align-items:baseline; gap:9px;
+    background:var(--panel-2); border:1px solid var(--line-strong); border-radius:8px;
+    padding:8px 11px; font:inherit; color:var(--ink); cursor:pointer;
+  }
+  .sc-open:hover{border-color:var(--accent); color:#fff}
+  .sc-open .name{font-size:13.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .sc-open .meta{margin-left:auto; font-size:11.5px; color:var(--dim); white-space:nowrap}
+  .sc-open.pinned .name::before{content:"★ "; color:var(--accent)}
+  .sc-drop{
+    flex:none; width:30px; padding:8px 0; text-align:center; line-height:1;
+    background:none; border:1px solid transparent; border-radius:8px;
+    color:var(--dim); cursor:pointer; font-size:15px;
+  }
+  .sc-drop:hover{color:var(--bad); border-color:var(--bad)}
+  .sc-add{display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap}
+  .sc-add input{flex:1 1 170px; min-width:0}
+  .sc-add select{flex:0 0 130px}
+  .sc-empty{color:var(--dim); font-size:13px; padding:6px 2px}
+
   /* player */
   footer{
     position:fixed; bottom:0; left:0; right:0; background:rgba(14,17,22,.96);
@@ -282,6 +309,34 @@
       <button onclick="addTodo()">Add</button>
     </div>
     <div id="todoList"></div>
+  </section>
+
+  <!-- frequently used --------------------------------------------------- -->
+  <section class="card news" id="shortcutsCard">
+    <h2>Frequently used
+      <span class="right">
+        <button onclick="toggleShortcutAdd()" id="scAddBtn">+ Add</button>
+      </span>
+    </h2>
+    <div class="sc-add" id="scAddRow" hidden>
+      <select id="scKind" aria-label="What kind of shortcut">
+        <option value="site">Website</option>
+        <option value="app">App or file</option>
+      </select>
+      <input id="scLabel" type="text" placeholder="Name (optional)" aria-label="Shortcut name">
+      <input id="scTarget" type="text" placeholder="example.com  ·  or C:\path\to\app.exe" aria-label="Address or path">
+      <button class="primary" onclick="addShortcut()">Add</button>
+    </div>
+    <div class="sc-cols">
+      <div>
+        <div class="sc-head">Sites</div>
+        <div id="scSites"></div>
+      </div>
+      <div>
+        <div class="sc-head">Apps</div>
+        <div id="scApps"></div>
+      </div>
+    </div>
   </section>
 
   <!-- markets ---------------------------------------------------------- -->
@@ -479,6 +534,92 @@ async function loadBriefing(){
     $('newsCount').textContent = readOut ? `${readOut} read out` : '';
   }catch(e){ toast('Briefing failed to load: ' + e.message, true); }
 }
+
+/* --------------------------------------------------- frequently used
+
+   Sites come from browser history summed per domain; apps come from the
+   Windows launch counts. Anything detected can be dropped, anything missing
+   can be pinned - the detection is a starting point, not the last word.   */
+
+async function loadShortcuts(){
+  try{
+    const d = await api('/api/shortcuts');
+    renderShortcuts('scSites', d.sites, 'Nothing yet — browse a bit, or add one.');
+    renderShortcuts('scApps',  d.apps,  'Nothing yet — open some apps, or add one.');
+  }catch(e){
+    $('scSites').innerHTML = `<div class="sc-empty">Couldn't read these: ${esc(e.message)}</div>`;
+    $('scApps').innerHTML = '';
+  }
+}
+
+function renderShortcuts(where, rows, emptyMsg){
+  if(!rows || !rows.length){
+    $(where).innerHTML = `<div class="sc-empty">${esc(emptyMsg)}</div>`;
+    return;
+  }
+  $(where).innerHTML = rows.map(r => `
+    <div class="sc-row">
+      <button class="sc-open${r.source === 'pinned' ? ' pinned' : ''}"
+              data-id="${esc(r.id)}" aria-label="Open ${esc(r.label)}">
+        <span class="name">${esc(r.label)}</span>
+        <span class="meta">${esc(r.detail || '')}</span>
+      </button>
+      <button class="sc-drop" data-drop="${esc(r.id)}"
+              aria-label="Remove ${esc(r.label)} from this panel"
+              title="Remove from this panel">×</button>
+    </div>`).join('');
+}
+
+async function openShortcut(id, btn){
+  const label = btn.querySelector('.name').textContent;
+  btn.disabled = true;
+  try{
+    await api('/api/shortcuts/open', {method:'POST',
+      headers:{'Content-Type':'application/json'}, body: JSON.stringify({id})});
+    toast('Opening ' + label);
+    announce('Opening ' + label);
+  }catch(e){ toast(e.message, true); }
+  finally{ btn.disabled = false; }
+}
+
+async function dropShortcut(id){
+  try{
+    await api('/api/shortcuts/remove', {method:'POST',
+      headers:{'Content-Type':'application/json'}, body: JSON.stringify({id})});
+    await loadShortcuts();
+    toast('Removed from the panel');
+  }catch(e){ toast(e.message, true); }
+}
+
+function toggleShortcutAdd(){
+  const row = $('scAddRow');
+  row.hidden = !row.hidden;
+  $('scAddBtn').textContent = row.hidden ? '+ Add' : 'Cancel';
+  if(!row.hidden) $('scTarget').focus();
+}
+
+async function addShortcut(){
+  const target = $('scTarget').value.trim();
+  if(!target){ toast('Give it something to open', true); return; }
+  try{
+    await api('/api/shortcuts/add', {method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({kind: $('scKind').value, label: $('scLabel').value, target})});
+    $('scLabel').value = ''; $('scTarget').value = '';
+    toggleShortcutAdd();
+    await loadShortcuts();
+    toast('Added');
+  }catch(e){ toast(e.message, true); }
+}
+
+// Delegated, so the rows can be re-rendered without rebinding.
+document.addEventListener('click', ev => {
+  const open = ev.target.closest('.sc-open');
+  if(open){ openShortcut(open.dataset.id, open); return; }
+  const drop = ev.target.closest('.sc-drop');
+  if(drop){ dropShortcut(drop.dataset.drop); }
+});
+$('scTarget')?.addEventListener('keydown', e => { if(e.key === 'Enter') addShortcut(); });
 
 /* --------------------------------------------------------------- listen in
 
@@ -1196,6 +1337,7 @@ loadTodos();
 loadMarkets();
 loadVerse();
 loadLibrary();
+loadShortcuts();
 loadPlayback(true);
 // Full poll every 5s (~180ms) keeps the position honest; the bar itself is
 // redrawn locally 4x a second so it moves smoothly in between.

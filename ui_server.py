@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 import subprocess
 import sys
 import threading
@@ -29,6 +30,7 @@ import documents
 import events_store
 import llm
 import scripture
+import shortcuts
 import stocks
 
 HERE = Path(__file__).resolve().parent
@@ -197,6 +199,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(self.passage(query))
             if route == "/api/todos":
                 return self._json({"ok": True, "todos": load_json(TODOS, [])})
+            if route == "/api/shortcuts":
+                return self._json({"ok": True, **shortcuts.listing()})
             if route == "/api/playback":
                 return self._json(self.playback(query.get("full", ["1"])[0] != "0"))
             if route == "/api/month":
@@ -280,6 +284,20 @@ class Handler(BaseHTTPRequestHandler):
                 return self.read_passage(json.loads(self._body() or b"{}"))
             if route == "/api/listen":
                 return self._json(self.listen_in(json.loads(self._body() or b"{}")))
+            if route == "/api/shortcuts/add":
+                payload = json.loads(self._body() or b"{}")
+                try:
+                    row = shortcuts.add(payload.get("kind", ""), payload.get("label", ""),
+                                        payload.get("target", ""))
+                except ValueError as exc:
+                    return self._fail(str(exc))
+                return self._json({"ok": True, "item": row})
+            if route == "/api/shortcuts/remove":
+                payload = json.loads(self._body() or b"{}")
+                return self._json({"ok": True,
+                                   "removed": shortcuts.remove(payload.get("id", ""))})
+            if route == "/api/shortcuts/open":
+                return self._json(self.open_shortcut(json.loads(self._body() or b"{}")))
             if route == "/api/playback":
                 return self._json(self.playback_action(json.loads(self._body() or b"{}")))
         except urllib.error.HTTPError as exc:
@@ -742,6 +760,31 @@ class Handler(BaseHTTPRequestHandler):
                 "source": source, "url": found["url"], "note": note,
                 "words": len(script.split()), "article_words": found["words"],
                 "method": found["method"], "llm": bool(note == "")}
+
+    def open_shortcut(self, payload: dict) -> dict:
+        """Launch a site or app from the panel.
+
+        Deliberately takes an id and looks the target up, rather than opening
+        whatever path arrives in the body. This endpoint listens on a local
+        port, and any page open in the browser can POST to it - accepting a
+        path from the request would make that "run anything on this machine".
+        The Origin check is the second half of the same concern: a real click
+        from the dashboard sends no Origin or our own, never someone else's.
+        """
+        origin = (self.headers.get("Origin") or "").rstrip("/")
+        if origin and origin not in (f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}"):
+            return {"ok": False, "error": "refused: request came from another site"}
+
+        row = shortcuts.resolve(payload.get("id", ""))
+        if not row:
+            return {"ok": False, "error": "nothing on the panel with that id"}
+
+        target = row["target"]
+        try:
+            os.startfile(target)          # ShellExecute: handles URLs, paths and shell: URIs
+        except OSError as exc:
+            return {"ok": False, "error": f"couldn't open {row['label']} ({exc.__class__.__name__})"}
+        return {"ok": True, "opened": row["label"]}
 
     def set_schedule(self, payload: dict) -> dict:
         when = str(payload.get("time", "")).strip()

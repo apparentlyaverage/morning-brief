@@ -11,6 +11,9 @@ todos.json
 events.json
 calendar.json
 library/
+# Your pinned shortcuts, and which detected sites you've dismissed - the
+# hidden list is derived from your browsing, so it is personal data too.
+shortcuts.json
 
 # ------------------------------------------------------- generated at runtime
 briefing.txt

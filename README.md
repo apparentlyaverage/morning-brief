@@ -46,8 +46,26 @@ doesn't.
 | **Verse of the day** | Bible, Qur'an or Bhagavad Gita, quoted exactly |
 | **Voice** | neural TTS, degrading to two offline engines |
 | **Pauses last night** | whatever you fell asleep to — a YouTube tab, a podcast — is paused before the music starts |
+| **Frequently used** | the sites and apps you actually open, one click away — detected, and editable |
 | **Dashboard** | month calendar, to-do list, news cards, player with queue and seek, and a document reader that remembers your place |
 | **PWA** | installable, works as a desktop app |
+
+### Frequently used
+
+Sites come from your browser history, summed **per domain** — the raw table is
+topped by a downloaded PDF opened 4,000 times and deep CMS links you'd never
+click again, so the domain is the useful unit. Apps come from the Windows
+launch counts. Both are a starting point: drop anything you don't want, pin
+anything that's missing.
+
+It reads history locally with `sqlite3` and the registry with `winreg`, both
+standard library. Nothing about it leaves the machine, and `shortcuts.json` is
+git-ignored with the rest of your data.
+
+One deliberate constraint: the endpoint that opens things takes an **id from
+the panel**, never a path from the request. It listens on a local port, and
+any page open in your browser can post to it — accepting a path would turn
+that into "run anything on this machine".
 
 ### Listen in
 
@@ -212,6 +230,7 @@ speak.ps1            text to speech, online with two offline fallbacks
 say_online.py        neural voice via edge-tts
 cider.ps1            Cider control (playlists, playback, volume)
 article.py           pulls the readable body out of a news page
+shortcuts.py         frequent sites and apps, plus your own pins
 calendar_ics.py      .ics importer with RRULE expansion
 events_store.py      hand-added calendar events
 documents.py         document library and reading position
