@@ -90,5 +90,30 @@
       "^GSPC",
       "AAPL"
     ]
+  },
+  "devlog": {
+    "enabled": false,
+    "_note": "Pulls what you and a collaborator shipped since the last briefing. Off by default: it needs a GitHub token and/or a Notion integration. See the 'Dev log' section of the README for how to create both. Tokens can live here, or write \"env:NAME\" to read an environment variable instead so they stay out of this file.",
+    "github": {
+      "enabled": true,
+      "token": "env:MORNING_BRIEF_GITHUB_TOKEN",
+      "username": "",
+      "_username_note": "Your GitHub login. Commits by this account are read out as 'you'; anyone else is named.",
+      "repos": [],
+      "_repos_note": "owner/name, e.g. \"apparentlyaverage/morning-brief\". Include a collaborator's repo to hear about their work too.",
+      "lookback_hours": 24
+    },
+    "notion": {
+      "enabled": true,
+      "token": "env:MORNING_BRIEF_NOTION_TOKEN",
+      "workspace": "workspace",
+      "_workspace_note": "Any label you like - it only names the saved timestamp.",
+      "collaborator": "",
+      "_collaborator_note": "Who to credit for Notion edits in the summary, e.g. \"Sam\". Left blank they're credited to 'Notion'.",
+      "page_ids": [],
+      "_page_ids_note": "Optional. Empty means every page shared with the integration; otherwise only these ids.",
+      "query": "",
+      "lookback_hours": 24
+    }
   }
 }

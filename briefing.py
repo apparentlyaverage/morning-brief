@@ -680,6 +680,67 @@ def get_stocks(cfg: dict) -> list[dict]:
         return []
 
 
+def get_devlog(cfg: dict) -> dict:
+    """Commits and Notion edits since the last briefing.
+
+    Same shape as the other fetchers: a failure here returns an empty result
+    with its reasons attached, never an exception - a bad token should cost
+    this section only.
+    """
+    opts = cfg.get("devlog") or {}
+    if not opts.get("enabled"):
+        return {"entries": [], "summary": "", "problems": []}
+    try:
+        import devlog as devlog_mod
+        return devlog_mod.collect(cfg)
+    except Exception as exc:
+        return {"entries": [], "summary": "",
+                "problems": [f"Dev log unavailable ({type(exc).__name__})"]}
+
+
+def render_devlog(activity: dict) -> str:
+    if not activity:
+        return ""
+    entries = activity.get("entries") or []
+    problems = activity.get("problems") or []
+    if not entries and not problems:
+        return ""
+
+    out = [heading("SINCE YESTERDAY", C.CYAN)]
+    summary = (activity.get("summary") or "").strip()
+    if summary:
+        out.extend(wrap(summary, width=64))
+        out.append("")
+
+    for entry in entries[:10]:
+        who = "you" if entry.get("mine") else (entry.get("who") or "someone")
+        if entry.get("source") == "github":
+            what = f"{entry.get('repo', '')} · {entry.get('summary', '')}"
+        else:
+            what = f"Notion · {entry.get('title', '')}"
+        out.append(f"  {C.WHITE}{who[:14]:<15}{C.RESET}{C.DIM}{what[:56]}{C.RESET}")
+
+    if len(entries) > 10:
+        out.append(f"  {C.DIM}...and {len(entries) - 10} more{C.RESET}")
+    for problem in problems:
+        out.append(f"  {C.DIM}({problem}){C.RESET}")
+    return "\n".join(out)
+
+
+def spoken_devlog(activity: dict) -> str:
+    """The model's summary if it produced one, else a mechanical sentence."""
+    if not activity or not (activity.get("entries") or []):
+        return ""
+    summary = (activity.get("summary") or "").strip()
+    if summary:
+        return summary
+    try:
+        import devlog as devlog_mod
+        return devlog_mod.plain_summary(activity)
+    except Exception:
+        return ""
+
+
 def wrap(text: str, width: int = 60, indent: str = "  ") -> list[str]:
     words, lines, line = text.split(), [], ""
     for word in words:
@@ -898,8 +959,10 @@ def ordinal(day: int) -> str:
     return f"{day}{suffix}"
 
 
-def build_spoken(cfg, now, weather, timetable, news, cal, verse=None, quotes=None) -> str:
-    fallback = _join_fallback_spoken(cfg, now, weather, timetable, news, cal, verse, quotes)
+def build_spoken(cfg, now, weather, timetable, news, cal,
+                 verse=None, quotes=None, activity=None) -> str:
+    fallback = _join_fallback_spoken(cfg, now, weather, timetable, news, cal,
+                                     verse, quotes, activity)
     rewritten = spoken_via_llm(cfg, now, weather, timetable, news, cal)
     if not rewritten:
         return fallback
@@ -907,12 +970,17 @@ def build_spoken(cfg, now, weather, timetable, news, cal, verse=None, quotes=Non
     # The model rewrites the briefing, but it is never shown the scripture:
     # a verse must be read exactly as written, not paraphrased. Markets are
     # appended for the same reason - the numbers should not be reworded.
-    tail = [block for block in (spoken_stocks(quotes or [], cfg), spoken_verse(verse)) if block]
+    # The dev log is appended rather than merged because it has already been
+    # summarised by the model once; handing it back for a second rewrite
+    # invites it to embellish what you actually shipped.
+    tail = [block for block in (spoken_devlog(activity or {}),
+                                spoken_stocks(quotes or [], cfg),
+                                spoken_verse(verse)) if block]
     return "\n".join([rewritten] + tail) if tail else rewritten
 
 
 def _join_fallback_spoken(cfg, now, weather, timetable, news, cal,
-                          verse=None, quotes=None) -> str:
+                          verse=None, quotes=None, activity=None) -> str:
     parts = [
         f"{greeting(now, cfg.get('name', ''))}. "
         f"It's {now:%A} the {ordinal(now.day)} of {now:%B}.",
@@ -920,6 +988,7 @@ def _join_fallback_spoken(cfg, now, weather, timetable, news, cal,
         spoken_classes(timetable, now),
     ]
     for block in (spoken_upcoming(cal, cfg, now),
+                  spoken_devlog(activity or {}),
                   spoken_stocks(quotes or [], cfg),
                   spoken_news(news, cfg),
                   spoken_verse(verse)):
@@ -1108,7 +1177,8 @@ def greeting(now: dt.datetime, name: str) -> str:
     return f"{word}, {name}" if name else word
 
 
-def build_data(cfg, now, weather, timetable, news, cal, verse=None, quotes=None) -> dict:
+def build_data(cfg, now, weather, timetable, news, cal,
+               verse=None, quotes=None, activity=None) -> dict:
     """Structured version of the same briefing, for the dashboard to render."""
     today = now.date()
     running, note = academic_status(timetable, today)
@@ -1164,6 +1234,11 @@ def build_data(cfg, now, weather, timetable, news, cal, verse=None, quotes=None)
         "headlines": headlines,
         "verse": verse or None,
         "stocks": quotes or [],
+        "devlog": {
+            "summary": (activity or {}).get("summary", ""),
+            "entries": (activity or {}).get("entries", []),
+            "problems": (activity or {}).get("problems", []),
+        },
     }
 
 
@@ -1171,15 +1246,17 @@ def build(cfg: dict, now: dt.datetime) -> tuple[str, str, dict]:
     """Fetch once, render three ways: on-screen, spoken, and structured."""
     # All four network calls at once - the scripture sources in particular are
     # slow, and there's no reason to wait on them in series.
-    with futures.ThreadPoolExecutor(max_workers=4) as pool:
+    with futures.ThreadPoolExecutor(max_workers=5) as pool:
         weather_f = pool.submit(get_weather, cfg)
         news_f = pool.submit(get_news, cfg)
         verse_f = pool.submit(get_verse, cfg)
         stocks_f = pool.submit(get_stocks, cfg)
+        devlog_f = pool.submit(get_devlog, cfg)
         weather = weather_f.result()
         news = news_f.result()
         verse = verse_f.result()
         quotes = stocks_f.result()
+        activity = devlog_f.result()
 
     timetable = load_timetable()
     cal = load_calendar()
@@ -1195,7 +1272,7 @@ def build(cfg: dict, now: dt.datetime) -> tuple[str, str, dict]:
     diary = render_upcoming(cal, cfg, now)
     if diary:
         sections.append(diary)
-    for block in (render_stocks(quotes), render_verse(verse)):
+    for block in (render_devlog(activity), render_stocks(quotes), render_verse(verse)):
         if block:
             sections.append(block)
     sections.append(render_news(news, cfg))
@@ -1203,8 +1280,8 @@ def build(cfg: dict, now: dt.datetime) -> tuple[str, str, dict]:
 
     display = "\n".join(sections)
     return (display,
-            build_spoken(cfg, now, weather, timetable, news, cal, verse, quotes),
-            build_data(cfg, now, weather, timetable, news, cal, verse, quotes))
+            build_spoken(cfg, now, weather, timetable, news, cal, verse, quotes, activity),
+            build_data(cfg, now, weather, timetable, news, cal, verse, quotes, activity))
 
 
 def main() -> int:

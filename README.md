@@ -41,6 +41,7 @@ doesn't.
 | **Classes** | your timetable, gated on term dates, exam blocks and public holidays |
 | **Calendar** | import an `.ics`, or add events by hand |
 | **Markets** | shares, indices and crypto, including JSE tickers |
+| **Dev log** | what you and a collaborator shipped since yesterday, from GitHub and Notion |
 | **News** | SA and world RSS, deduplicated and round-robined across sources |
 | **Listen in** | click a story and it reads you the *article*, not the headline |
 | **Verse of the day** | Bible, Qur'an or Bhagavad Gita, quoted exactly |
@@ -49,6 +50,48 @@ doesn't.
 | **Frequently used** | the sites and apps you actually open, one click away — detected, and editable |
 | **Dashboard** | month calendar, to-do list, news cards, player with queue and seek, and a document reader that remembers your place |
 | **PWA** | installable, works as a desktop app |
+
+### Dev log
+
+If you're building something, the briefing can tell you what moved since
+yesterday — your commits, a collaborator's, and any Notion pages that changed —
+summarised in a couple of sentences per person rather than read out as a list
+of commit subjects.
+
+It's **off by default**, because it needs credentials. Turn on `devlog.enabled`
+in the settings file once you've done the setup below.
+
+**GitHub.** Create a fine-grained personal access token at *Settings →
+Developer settings → Personal access tokens*, give it **read-only Contents**
+access on the repositories you want to follow, and put the repos in
+`devlog.github.repos` as `owner/name`. Set `devlog.github.username` to your
+GitHub login — commits by that account are read out as "you", anyone else is
+named. A collaborator's repo works the same way, as long as your token can
+read it.
+
+**Notion.** Create an internal integration at
+[notion.so/my-integrations](https://www.notion.so/my-integrations) and copy its
+secret. Then **share the pages with it** — open a page, *⋯ → Connections → your
+integration*. This is the step people miss: an integration with nothing shared
+sees an empty workspace, and the briefing will say so rather than pretending
+all is well. Set `devlog.notion.collaborator` to whoever should be credited for
+those edits.
+
+**Tokens.** Either paste them into `config.json`, or leave the default
+`"env:MORNING_BRIEF_GITHUB_TOKEN"` / `"env:MORNING_BRIEF_NOTION_TOKEN"` and set
+those environment variables instead, so the secrets never touch the file.
+`config.json` is git-ignored either way.
+
+Two behaviours worth knowing. `devlog_state.json` records when each source was
+last read, so every run only asks for what's new — and a source that *fails* is
+deliberately not marked as read, so a rate-limited morning doesn't silently
+skip a day of commits. And the digest accumulates over the day rather than
+being replaced, so opening the dashboard at noon still shows what came in
+overnight.
+
+Notion's search endpoint can't filter on `last_edited_time` — its filter only
+narrows by object type — so results are sorted newest-first and cut off at the
+stored timestamp on this side.
 
 ### Frequently used
 
@@ -231,6 +274,7 @@ say_online.py        neural voice via edge-tts
 cider.ps1            Cider control (playlists, playback, volume)
 article.py           pulls the readable body out of a news page
 shortcuts.py         frequent sites and apps, plus your own pins
+devlog.py            GitHub commits and Notion edits since last time
 calendar_ics.py      .ics importer with RRULE expansion
 events_store.py      hand-added calendar events
 documents.py         document library and reading position

@@ -43,3 +43,6 @@ desktop.ini
 # Extracted app icons and favicons, rebuilt on demand from your own
 # browser cache and installed packages.
 icon_cache/
+
+# Per-source last_checked timestamps and the accumulated daily digest.
+devlog_state.json
