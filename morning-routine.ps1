@@ -13,6 +13,7 @@ param(
     [switch]$NoMusic,
     [switch]$NoSpeak,
     [switch]$NoDashboard,      # skip the pop-up dashboard
+    [switch]$NoPause,          # leave last night's video/podcast playing
     [int]$HoldSeconds = 0      # 0 = wait for a keypress at the end
 )
 
@@ -97,6 +98,50 @@ function Start-Music {
     return $true
 }
 
+function Stop-OtherMedia {
+    <#
+        Pause whatever was left playing overnight - a YouTube tab, a podcast,
+        anything that registers with Windows' media transport controls.
+
+        Two rules matter here:
+
+        1. Only sessions actually reporting "Playing" are touched. The obvious
+           implementation - sending the play/pause media key - is a *toggle*,
+           so on a machine where everything was already paused it would cheerfully
+           start playing something at half six in the morning.
+        2. Cider is skipped. It's the one player we're about to use, and pausing
+           it here would fight the next step.
+    #>
+    try {
+        Add-Type -Path (Join-Path $here 'TtsHelper.dll') -ErrorAction Stop
+        $sessions = [MediaSessions]::List() | ConvertFrom-Json
+    } catch {
+        Write-Warning "Couldn't read the media sessions: $($_.Exception.Message)"
+        return
+    }
+
+    $playing = @($sessions | Where-Object {
+        $_.status -eq 'Playing' -and $_.app -notlike '*Cider*'
+    })
+    if (-not $playing.Count) {
+        Write-Host 'Nothing else was playing.' -ForegroundColor DarkGray
+        return
+    }
+
+    foreach ($s in $playing) {
+        # Name the app rather than the raw AppUserModelId - "MSEdge" reads
+        # better than "CiderCollective.Cider_a6qxe093bx5xj!App" would.
+        $name = ($s.app -split '[!_]')[0]
+        try {
+            $res = [MediaSessions]::Control($s.app, 'pause') | ConvertFrom-Json
+            if ($res.ok) { Write-Host "Paused $name." -ForegroundColor DarkGray }
+            else { Write-Warning "$name wouldn't pause$(if ($res.error) { ": $($res.error)" })." }
+        } catch {
+            Write-Warning "Couldn't pause $name`: $($_.Exception.Message)"
+        }
+    }
+}
+
 function Fade-Volume([double]$From, [double]$To, [int]$Ms) {
     $steps = 12
     for ($i = 1; $i -le $steps; $i++) {
@@ -108,6 +153,11 @@ function Fade-Volume([double]$From, [double]$To, [int]$Ms) {
 
 # ------------------------------------------------------------------ run
 $Host.UI.RawUI.WindowTitle = 'Morning Briefing'
+
+# Silence last night before making this morning's noise. Done first: setting
+# the master volume while a video is still running would just make the video
+# louder.
+if (-not $NoPause) { Stop-OtherMedia }
 
 # Windows master volume. Whatever it was left at last night, the briefing
 # should start from a known level - and unmuted, or none of this is audible.

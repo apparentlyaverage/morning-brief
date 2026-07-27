@@ -45,6 +45,7 @@ doesn't.
 | **Listen in** | click a story and it reads you the *article*, not the headline |
 | **Verse of the day** | Bible, Qur'an or Bhagavad Gita, quoted exactly |
 | **Voice** | neural TTS, degrading to two offline engines |
+| **Pauses last night** | whatever you fell asleep to — a YouTube tab, a podcast — is paused before the music starts |
 | **Dashboard** | month calendar, to-do list, news cards, player with queue and seek, and a document reader that remembers your place |
 | **PWA** | installable, works as a desktop app |
 
@@ -153,7 +154,8 @@ Prefer to do it by hand? `powershell -ExecutionPolicy Bypass -File setup.ps1`.
 | `install-task.ps1 -Time 06:30` | change the daily time |
 | `install-task.ps1 -Uninstall` | remove the scheduled task |
 
-Useful for testing: `-IntroSeconds 5`, `-NoMusic`, `-NoSpeak`, `-NoDashboard`.
+Useful for testing: `-IntroSeconds 5`, `-NoMusic`, `-NoSpeak`, `-NoDashboard`,
+`-NoPause` (leave last night's video playing).
 
 ### Sending it to someone
 
@@ -215,6 +217,7 @@ scripture.py         verse of the day
 stocks.py            market quotes
 llm.py               Ollama client
 TtsHelper.cs         C# shim: modern Windows voices + system volume
+MediaSessions.cs     C# shim: pause whatever else is playing
 tests/               stdlib unittest suite (run-tests.ps1)
 make-release.ps1     builds the zip you send to someone else
 ```
