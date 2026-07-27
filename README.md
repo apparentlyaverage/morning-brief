@@ -153,6 +153,8 @@ Prefer to do it by hand? `powershell -ExecutionPolicy Bypass -File setup.ps1`.
 | `run-briefing.ps1` | briefing only, no music |
 | `install-task.ps1 -Time 06:30` | change the daily time |
 | `install-task.ps1 -Uninstall` | remove the scheduled task |
+| `install-server-task.ps1` | keep the dashboard reachable at any hour |
+| `install-server-task.ps1 -Uninstall` | stop it starting at login |
 
 Useful for testing: `-IntroSeconds 5`, `-NoMusic`, `-NoSpeak`, `-NoDashboard`,
 `-NoPause` (leave last night's video playing).
@@ -220,6 +222,7 @@ TtsHelper.cs         C# shim: modern Windows voices + system volume
 MediaSessions.cs     C# shim: pause whatever else is playing
 tests/               stdlib unittest suite (run-tests.ps1)
 make-release.ps1     builds the zip you send to someone else
+install-server-task.ps1  keeps the dashboard server up between mornings
 ```
 
 `TtsHelper.dll` is committed so the app runs without a build step. Rebuild with

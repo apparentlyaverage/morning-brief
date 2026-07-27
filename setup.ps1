@@ -120,6 +120,16 @@ if (-not $SkipSchedule -and $python -and $issues.Count -eq 0) {
     } catch {
         Warn "could not register the scheduled task: $($_.Exception.Message)"
     }
+
+    # Keeps the dashboard reachable at any hour, not just after the morning
+    # routine has run. Without it, opening the installed app during the day
+    # gives "connection refused".
+    try {
+        & (Join-Path $here 'install-server-task.ps1') | Out-Null
+        Good 'dashboard server starts at login'
+    } catch {
+        Warn "could not register the dashboard server task: $($_.Exception.Message)"
+    }
 }
 
 # ---------------------------------------------------------------- finish
