@@ -11,9 +11,12 @@ get you out of bed.
 Everything is local: a Python script, a PowerShell sequence, and a small web
 server on `127.0.0.1`. No account, no cloud, no telemetry.
 
-![The Morning Brief dashboard: a month calendar with the day's lectures, an
-editable to-do list, live weather, and the music player along the
-bottom](docs/dashboard.png)
+<!-- Screenshot goes here: ![Dashboard](docs/dashboard.png)
+     Note for whoever adds one: the dashboard shows a real timetable with
+     venue codes and a real to-do list. On a public repo that publishes where
+     you are at a given hour, and anyone you've named. Point the server at
+     throwaway todos.json / timetable.json before capturing. -->
+
 
 ## What it sounds like
 
