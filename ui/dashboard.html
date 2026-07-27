@@ -133,7 +133,21 @@
   }
   .story:hover{border-color:var(--accent); transform:translateY(-2px)}
   .story .src{font-size:11px; text-transform:uppercase; letter-spacing:.07em;
-              color:var(--accent); margin-bottom:6px}
+              color:var(--accent); margin-bottom:6px;
+              display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+
+  /* Stories the presenter actually read out this morning. The marker is a
+     badge and a coloured edge rather than a colour change on its own -
+     colour alone would carry the meaning for people who can't see it, and
+     the badge text is what a screen reader announces. */
+  .story.spoken{border-color:var(--accent-2)}
+  .story.spoken:hover{border-color:var(--accent)}
+  .badge{
+    font-size:10px; letter-spacing:.06em; font-weight:600; white-space:nowrap;
+    color:#14161a; background:var(--accent-2); border-radius:99px; padding:2px 8px;
+  }
+  .news h2 .count{color:var(--accent-2); text-transform:none; letter-spacing:0;
+                  font-size:12.5px; font-weight:500}
   .story .hl{font-size:14.5px; line-height:1.45; font-weight:500}
   /* The whole card opens the story, but only the headline is a link in the
      accessibility tree - a button can't live inside an <a>, and screen-reader
@@ -316,6 +330,7 @@
   <section class="card news">
     <h2>News
       <span class="right">
+        <span class="count" id="newsCount"></span>
         <span id="newsAge" style="color:var(--dim); text-transform:none; letter-spacing:0; font-size:12.5px"></span>
         <button onclick="refreshBriefing(this)">Refresh</button>
       </span>
@@ -448,14 +463,20 @@ async function loadBriefing(){
                   data-source="${esc(h.source)}"
                   aria-label="Listen in on: ${esc(h.title)}">🎧 Listen in</button>
         </div>` : '';
-      return `<div class="story${linked ? '' : ' nolink'}">
-        <div class="src">${esc(h.source)}</div>
+      // "read out" rather than "featured": it says what actually happened,
+      // and it's the phrase a screen reader will announce.
+      const badge = h.spoken ? '<span class="badge">read out</span>' : '';
+      return `<div class="story${linked ? '' : ' nolink'}${h.spoken ? ' spoken' : ''}">
+        <div class="src">${esc(h.source)}${badge}</div>
         ${headline}
         ${h.summary ? `<div class="sm">${esc(h.summary.slice(0,150))}${h.summary.length>150?'…':''}</div>` : ''}
         ${foot}
       </div>`;
     }).join('');
     $('newsCards').innerHTML = cards || '<div class="empty">No headlines.</div>';
+
+    const readOut = (data.headlines || []).filter(h => h.spoken).length;
+    $('newsCount').textContent = readOut ? `${readOut} read out` : '';
   }catch(e){ toast('Briefing failed to load: ' + e.message, true); }
 }
 

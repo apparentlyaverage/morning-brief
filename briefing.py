@@ -833,33 +833,56 @@ def spoken_classes(timetable: dict, now: dt.datetime) -> str:
     return spoken
 
 
-def spoken_news(sources: list[dict], cfg: dict) -> str:
+def choose_spoken(sources: list[dict], cfg: dict) -> list[dict]:
+    """The stories that actually get read out loud.
+
+    Round-robin across sources so one chatty feed can't take every slot, capped
+    at speech.headlines, de-duplicated on the speakable title.
+
+    This is the single definition of "was it read out". The spoken script, the
+    prompt handed to the model, and the dashboard's featured marker all call
+    this, so they cannot disagree - previously the first two carried their own
+    copy of this loop and the third had no idea which stories were picked.
+
+    The model is given exactly these and told not to invent others, so the set
+    holds whether or not the script gets rewritten.
+    """
     limit = int(cfg.get("speech", {}).get("headlines", 5))
-    live = [s for s in sources if s["items"]]
-    if not live:
-        return "I couldn't reach the news feeds."
+    live = [s for s in sources if s.get("items")]
 
     seen: set[str] = set()
-    headlines: list[str] = []
+    chosen: list[dict] = []
     depth = 0
-    while len(headlines) < limit:
+    while len(chosen) < limit:
         added = False
         for src in live:
-            if len(headlines) >= limit:
-                break
-            if depth >= len(src["items"]):
+            if len(chosen) >= limit or depth >= len(src["items"]):
                 continue
-            title = speakable_title(src["items"][depth]["title"])
+            item = src["items"][depth]
+            title = speakable_title(item["title"])
             key = title.lower()[:60]
             if not title or key in seen:
                 continue
             seen.add(key)
-            headlines.append(title)
+            chosen.append({"source": src["name"], "title": title,
+                           "link": item.get("link", ""), "key": key})
             added = True
         if not added:
             break
         depth += 1
+    return chosen
 
+
+def spoken_key(title: str) -> str:
+    """Identity used to match a headline against the spoken set."""
+    return speakable_title(title).lower()[:60]
+
+
+def spoken_news(sources: list[dict], cfg: dict) -> str:
+    if not [s for s in sources if s.get("items")]:
+        return "I couldn't reach the news feeds."
+
+    headlines = [c["title"] for c in choose_spoken(sources, cfg)]
     if not headlines:
         return "No headlines this morning."
 
@@ -926,25 +949,10 @@ def _llm_payload(cfg, now, weather, timetable, news, cal) -> dict:
         for ev in diary
     ] or ["(none)"]
 
-    head_limit = int(cfg.get("speech", {}).get("headlines", 5))
-    seen: set[str] = set()
-    headline_lines: list[str] = []
-    depth = 0
-    while len(headline_lines) < head_limit:
-        added = False
-        for src in [s for s in news if s["items"]]:
-            if len(headline_lines) >= head_limit or depth >= len(src["items"]):
-                continue
-            title = speakable_title(src["items"][depth]["title"])
-            key = title.lower()[:60]
-            if not title or key in seen:
-                continue
-            seen.add(key)
-            headline_lines.append(f"- [{src['name']}] {title}")
-            added = True
-        if not added:
-            break
-        depth += 1
+    # Same selection the spoken script and the dashboard marker use, so the
+    # model is handed exactly the stories that count as "read out".
+    headline_lines = [f"- [{c['source']}] {c['title']}"
+                      for c in choose_spoken(news, cfg)]
 
     # Weather is summarised as plain text so the model doesn't have to parse
     # the API shape itself.
@@ -1111,6 +1119,11 @@ def build_data(cfg, now, weather, timetable, news, cal, verse=None, quotes=None)
     daily = (weather or {}).get("daily", {}) if isinstance(weather, dict) else {}
     desc, icon = describe(cur.get("weather_code"))
 
+    # Which stories the presenter actually reads. Matched on the speakable
+    # title rather than the displayed one: the card keeps a kicker like
+    # "DIGITAL DEFICIT:" that speech strips, so the two forms differ.
+    spoken_set = {c["key"] for c in choose_spoken(news, cfg)}
+
     seen: set[str] = set()
     headlines = []
     for src in news:
@@ -1125,6 +1138,7 @@ def build_data(cfg, now, weather, timetable, news, cal, verse=None, quotes=None)
                 "title": title,
                 "summary": item.get("summary", "")[:280],
                 "link": item.get("link", ""),
+                "spoken": spoken_key(item["title"]) in spoken_set,
             })
 
     return {

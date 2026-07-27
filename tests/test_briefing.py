@@ -289,6 +289,128 @@ class FileLoading(unittest.TestCase):
                 self.assertEqual(briefing.load_config()["name"], "Zoë")
 
 
+class SpokenSelection(unittest.TestCase):
+    """Which stories get read out, and the dashboard's marker for them.
+
+    One selection feeds three consumers - the spoken script, the model's
+    prompt, and the "read out" badge. They must agree, because a badge that
+    marks a story the presenter never mentioned is worse than no badge.
+    """
+
+    @staticmethod
+    def feed(name, *titles):
+        return {"name": name, "error": None,
+                "items": [{"title": t, "summary": "", "link": f"https://x/{i}"}
+                          for i, t in enumerate(titles)]}
+
+    @staticmethod
+    def cfg(limit=5):
+        return {"speech": {"headlines": limit}}
+
+    def test_the_limit_is_respected(self):
+        news = [self.feed("A", *[f"Story number {i} about something" for i in range(20)])]
+        self.assertEqual(len(briefing.choose_spoken(news, self.cfg(3))), 3)
+
+    def test_it_round_robins_so_one_feed_cannot_take_every_slot(self):
+        news = [self.feed("Chatty", "Chatty one", "Chatty two", "Chatty three"),
+                self.feed("Quiet", "Quiet one")]
+        chosen = briefing.choose_spoken(news, self.cfg(3))
+        self.assertEqual([c["source"] for c in chosen], ["Chatty", "Quiet", "Chatty"])
+
+    def test_duplicates_across_sources_are_taken_once(self):
+        shared = "Ramaphosa accepts the resignation with immediate effect"
+        news = [self.feed("A", shared), self.feed("B", shared), self.feed("C", "Something else entirely")]
+        chosen = briefing.choose_spoken(news, self.cfg(5))
+        self.assertEqual(len(chosen), 2)
+
+    def test_asking_for_more_than_exists_returns_what_there_is(self):
+        news = [self.feed("A", "Only story here")]
+        self.assertEqual(len(briefing.choose_spoken(news, self.cfg(10))), 1)
+
+    def test_no_news_selects_nothing(self):
+        self.assertEqual(briefing.choose_spoken([], self.cfg()), [])
+        self.assertEqual(briefing.choose_spoken([self.feed("Dead")], self.cfg()), [])
+
+    def test_the_kicker_is_stripped_for_speech(self):
+        news = [self.feed("DM", "DIGITAL DEFICIT: SA mining falls behind on technology")]
+        chosen = briefing.choose_spoken(news, self.cfg())
+        self.assertEqual(chosen[0]["title"], "SA mining falls behind on technology")
+
+    def test_spoken_key_ignores_the_kicker_and_the_masthead(self):
+        self.assertEqual(
+            briefing.spoken_key("News24 | BIG NEWS: A thing occurred today"),
+            briefing.spoken_key("A thing occurred today"))
+
+
+class SpokenMarker(SpokenSelection):
+    """build_data's `spoken` flag."""
+
+    def build(self, news, limit=5):
+        cfg = {"speech": {"headlines": limit}, "name": "Sam", "city": "Makhanda"}
+        return briefing.build_data(cfg, dt.datetime(2026, 7, 27, 6, 30),
+                                   None, {}, news, {})
+
+    def test_exactly_the_chosen_stories_are_marked(self):
+        news = [self.feed("A", "First story about a thing", "Second story about another"),
+                self.feed("B", "Third story from elsewhere", "Fourth story from elsewhere")]
+        data = self.build(news, limit=2)
+        marked = [h for h in data["headlines"] if h["spoken"]]
+        self.assertEqual(len(marked), 2)
+        self.assertEqual({h["source"] for h in marked}, {"A", "B"})
+
+    def test_every_headline_carries_the_field(self):
+        news = [self.feed("A", *[f"Story {i} with enough words here" for i in range(8)])]
+        data = self.build(news, limit=3)
+        self.assertTrue(all("spoken" in h for h in data["headlines"]))
+        self.assertEqual(sum(h["spoken"] for h in data["headlines"]), 3)
+
+    def test_a_story_whose_card_title_keeps_a_kicker_is_still_matched(self):
+        """The card shows "BODY AND SOUL OP-ED: Go inward..." while the
+        presenter says "Go inward...". Matching the displayed titles would
+        silently fail to mark it."""
+        news = [self.feed("DM", "BODY AND SOUL OP-ED: Go inward and let it spill outward")]
+        data = self.build(news, limit=1)
+        card = data["headlines"][0]
+        self.assertTrue(card["title"].startswith("BODY AND SOUL OP-ED:"))
+        self.assertTrue(card["spoken"], "kicker headline was not marked")
+
+    def test_nothing_is_marked_when_speech_takes_no_headlines(self):
+        news = [self.feed("A", "A story that will not be read aloud")]
+        data = self.build(news, limit=0)
+        self.assertFalse(any(h["spoken"] for h in data["headlines"]))
+
+    def test_unmarked_stories_are_still_listed(self):
+        news = [self.feed("A", *[f"Story {i} with enough words here" for i in range(6)])]
+        data = self.build(news, limit=2)
+        self.assertEqual(len(data["headlines"]), 6)
+
+    def test_the_marked_set_matches_what_the_model_is_given(self):
+        # The prompt and the badge must describe the same stories.
+        news = [self.feed("A", "Alpha story about something notable",
+                               "Beta story about something else"),
+                self.feed("B", "Gamma story from another source")]
+        cfg = {"speech": {"headlines": 2}, "name": "", "city": ""}
+        payload = briefing._llm_payload(cfg, dt.datetime(2026, 7, 27, 6, 30),
+                                        None, {}, news, {})
+        data = briefing.build_data(cfg, dt.datetime(2026, 7, 27, 6, 30),
+                                   None, {}, news, {})
+        for h in data["headlines"]:
+            if h["spoken"]:
+                with self.subTest(title=h["title"]):
+                    self.assertIn(briefing.speakable_title(h["title"]), payload["headlines"])
+
+    def test_the_spoken_script_names_the_marked_stories(self):
+        news = [self.feed("A", "Alpha story about something notable"),
+                self.feed("B", "Beta story from another source")]
+        cfg = {"speech": {"headlines": 2}, "name": "", "city": ""}
+        script = briefing.spoken_news(news, cfg)
+        data = briefing.build_data(cfg, dt.datetime(2026, 7, 27, 6, 30), None, {}, news, {})
+        for h in data["headlines"]:
+            if h["spoken"]:
+                with self.subTest(title=h["title"]):
+                    self.assertIn(briefing.speakable_title(h["title"]), script)
+
+
 class SayTime(unittest.TestCase):
     def test_on_the_hour_drops_the_minutes(self):
         self.assertEqual(briefing.say_time("08:00"), "8 AM")
